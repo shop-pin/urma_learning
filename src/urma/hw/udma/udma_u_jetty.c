@@ -280,6 +280,22 @@ urma_status_t udma_u_unimport_jetty(urma_target_jetty_t *target_jetty)
 	return URMA_SUCCESS;
 }
 
+urma_status_t udma_u_post_jetty_send_wr(urma_jetty_t *urma_jetty,
+					urma_jfs_wr_t *wr,
+					urma_jfs_wr_t **bad_wr)
+{
+	struct udma_u_context *udma_ctx = to_udma_u_ctx(urma_jetty->urma_ctx);
+	struct udma_u_jetty *udma_jetty = to_udma_u_jetty(urma_jetty);
+	urma_status_t ret;
+
+	ret = udma_u_post_sq_wr(udma_ctx, &udma_jetty->sq, wr, bad_wr);
+	if (ret)
+		UDMA_LOG_ERR("JETTY post sq wr failed, ret = %d, id = %u.\n",
+			     ret, udma_jetty->sq.idx);
+
+	return ret;
+}
+
 urma_status_t udma_u_unbind_jetty(urma_jetty_t *jetty)
 {
 	struct udma_u_jetty *udma_jetty = to_udma_u_jetty(jetty);
