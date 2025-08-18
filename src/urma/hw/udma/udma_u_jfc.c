@@ -67,7 +67,10 @@ urma_jfc_t *udma_u_create_jfc(urma_context_t *ctx, urma_jfc_cfg_t *cfg)
 		return NULL;
 	}
 
-	if (pthread_spin_init(&jfc->cq.lock, PTHREAD_PROCESS_PRIVATE)) {
+	jfc->cq.lock_free = cfg->flag.bs.lock_free;
+
+	if (!jfc->cq.lock_free &&
+	    pthread_spin_init(&jfc->cq.lock, PTHREAD_PROCESS_PRIVATE)) {
 		UDMA_LOG_ERR("failed to init user udma jfc spinlock.\n");
 		goto err_init_lock;
 	}
@@ -102,7 +105,8 @@ err_create_jfc:
 err_alloc_sw_db:
 	udma_u_free_queue_buf(&jfc->cq);
 err_alloc_buf:
-	(void)pthread_spin_destroy(&jfc->cq.lock);
+	if (!jfc->cq.lock_free)
+		(void)pthread_spin_destroy(&jfc->cq.lock);
 err_init_lock:
 	free(jfc);
 	return NULL;
@@ -120,7 +124,10 @@ urma_status_t udma_u_delete_jfc(urma_jfc_t *jfc)
 
 	udma_u_free_sw_db(udma_ctx, udma_jfc->sw_db, UDMA_JFC_TYPE_DB);
 	udma_u_free_queue_buf(&udma_jfc->cq);
-	(void)pthread_spin_destroy(&udma_jfc->cq.lock);
+
+	if (!udma_jfc->cq.lock_free)
+		(void)pthread_spin_destroy(&udma_jfc->cq.lock);
+
 	free(udma_jfc);
 
 	return URMA_SUCCESS;
@@ -406,7 +413,8 @@ int udma_u_poll_jfc(urma_jfc_t *jfc, int cr_cnt, urma_cr_t *cr)
 	uint32_t ci;
 	int npolled;
 
-	(void)pthread_spin_lock(&udma_u_jfc->cq.lock);
+	if (!udma_u_jfc->cq.lock_free)
+		(void)pthread_spin_lock(&udma_u_jfc->cq.lock);
 
 	for (npolled = 0; npolled < cr_cnt; ++npolled) {
 		ret = udma_u_poll_one(udma_ctx, udma_u_jfc, cr + npolled);
@@ -419,7 +427,8 @@ int udma_u_poll_jfc(urma_jfc_t *jfc, int cr_cnt, urma_cr_t *cr)
 		*udma_u_jfc->sw_db = ci & UDMA_U_JFC_DB_CI_IDX_M;
 	}
 
-	(void)pthread_spin_unlock(&udma_u_jfc->cq.lock);
+	if (!udma_u_jfc->cq.lock_free)
+		(void)pthread_spin_unlock(&udma_u_jfc->cq.lock);
 
 	return ret == JFC_POLL_ERR ? -UDMA_INTER_ERR : npolled;
 }
@@ -439,7 +448,8 @@ void udma_u_clean_jfc(struct urma_jfc *jfc, uint32_t jetty_id)
 	uint32_t pi;
 
 	cq = &udma_u_jfc->cq;
-	(void)pthread_spin_lock(&cq->lock);
+	if (!cq->lock_free)
+		(void)pthread_spin_lock(&cq->lock);
 
 	cqe_size = 1U << cq->baseblk_shift;
 
@@ -474,5 +484,6 @@ void udma_u_clean_jfc(struct urma_jfc *jfc, uint32_t jetty_id)
 		*udma_u_jfc->sw_db = cq->ci & (uint32_t)UDMA_U_JFC_DB_CI_IDX_M;
 	}
 
-	(void)pthread_spin_unlock(&cq->lock);
+	if (!cq->lock_free)
+		(void)pthread_spin_unlock(&cq->lock);
 }
