@@ -15,6 +15,7 @@
 #define UDMA_JFR_IDX_QUE_ENTRY_SZ 4
 #define UDMA_JFR_DB_PROD_IDX_M GENMASK(15, 0)
 #define UDMA_U_MIN_JFR_DEPTH 64
+#define UDMA_JFR_LARGE_PACKAGE 4096
 
 static inline bool udma_jfrwq_overflow(struct udma_u_jfr *jfr)
 {

@@ -121,6 +121,7 @@ struct udma_u_jfr {
 	uint32_t *sw_db;
 	pthread_spinlock_t lock;
 	bool lock_free;
+	bool *long_sleeptime;
 };
 
 struct udma_u_jfs {

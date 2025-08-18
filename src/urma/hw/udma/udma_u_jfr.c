@@ -79,6 +79,7 @@ int exec_jfr_create_cmd(urma_context_t *ctx, struct udma_u_jfr *jfr,
 	cmd.buf_len = jfr->rq.qbuf_size;
 	/* JFR only support record db */
 	cmd.db_addr = (uintptr_t)jfr->sw_db;
+	cmd.jfr_sleep_buf = (uintptr_t)jfr->long_sleeptime;
 	cmd.idx_addr = (uintptr_t)jfr->idx_que.buf.buf;
 	cmd.idx_len = jfr->idx_que.buf.length;
 	cmd.jetty_addr = (uintptr_t)&jfr->rq;
@@ -159,6 +160,11 @@ urma_jfr_t *udma_u_create_jfr(urma_context_t *ctx, urma_jfr_cfg_t *cfg)
 	if (!udma_jfr->sw_db)
 		goto err_alloc_sw_db;
 
+	udma_jfr->long_sleeptime = (bool *)udma_u_alloc_sw_db(udma_ctx, UDMA_JFR_PAYLOAD);
+	if (!udma_jfr->long_sleeptime)
+		goto err_alloc_jfr_sleep_buf;
+
+	*udma_jfr->long_sleeptime = false;
 	ret = exec_jfr_create_cmd(ctx, udma_jfr, cfg);
 	if (ret) {
 		UDMA_LOG_ERR("urma cmd create jfr failed, ret = %d.\n", ret);
@@ -173,6 +179,8 @@ urma_jfr_t *udma_u_create_jfr(urma_context_t *ctx, urma_jfr_cfg_t *cfg)
 err_insert_node:
 	(void)urma_cmd_delete_jfr(&udma_jfr->base);
 err_exec_cmd:
+	udma_u_free_sw_db(udma_ctx, (uint32_t *)udma_jfr->long_sleeptime, UDMA_JFR_PAYLOAD);
+err_alloc_jfr_sleep_buf:
 	udma_u_free_sw_db(udma_ctx, udma_jfr->sw_db, UDMA_JFR_TYPE_DB);
 err_alloc_sw_db:
 	udma_u_free_queue_buf(&udma_jfr->rq);
@@ -194,6 +202,7 @@ static void udma_u_free_jfr(urma_jfr_t *jfr)
 	if (jfr->jfr_cfg.jfc)
 		udma_u_clean_jfc(jfr->jfr_cfg.jfc, jfr->jfr_id.id);
 
+	udma_u_free_sw_db(udma_ctx, (uint32_t *)udma_jfr->long_sleeptime, UDMA_JFR_PAYLOAD);
 	udma_u_free_sw_db(udma_ctx, udma_jfr->sw_db, UDMA_JFR_TYPE_DB);
 
 	udma_u_free_queue_buf(&udma_jfr->rq);
@@ -343,14 +352,19 @@ static void fill_wqe_idx(struct udma_u_jfr *jfr, uint32_t wqe_idx)
 static void fill_recv_sge_to_wqe(urma_jfr_wr_t *wr, void *wqe, struct udma_u_jfr *jfr)
 {
 	struct udma_wqe_sge *sge = (struct udma_wqe_sge *)wqe;
+	uint32_t total_len = 0;
 	uint32_t i, cnt;
 
 	for (i = 0, cnt = 0; i < wr->src.num_sge; i++) {
 		if (!wr->src.sge[i].len)
 			continue;
+		total_len += wr->src.sge[i].len;
 		set_data_of_sge(sge + cnt, wr->src.sge + i);
 		cnt++;
 	}
+
+	if (total_len > UDMA_JFR_LARGE_PACKAGE)
+		*jfr->long_sleeptime = true;
 
 	if (cnt < jfr->max_sge)
 		(void)memset(sge + cnt, 0, (jfr->max_sge - cnt) * UDMA_SGE_SIZE);
