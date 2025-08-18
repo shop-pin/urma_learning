@@ -34,6 +34,7 @@ static urma_ops_t g_udma_ops = {
 	.modify_jfr = udma_u_modify_jfr,
 	.query_jfr = udma_u_query_jfr,
 	.delete_jfr = udma_u_delete_jfr,
+	.delete_jfr_batch = udma_u_delete_jfr_batch,
 	.unimport_jfr = udma_u_unimport_jfr,
 	.create_jetty = udma_u_create_jetty,
 	.modify_jetty = udma_u_modify_jetty,

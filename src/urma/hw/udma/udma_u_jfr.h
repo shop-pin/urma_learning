@@ -39,6 +39,7 @@ static inline void set_data_of_sge(struct udma_wqe_sge *sge, const urma_sge_t *s
 
 urma_jfr_t *udma_u_create_jfr(urma_context_t *ctx, urma_jfr_cfg_t *cfg);
 urma_status_t udma_u_delete_jfr(urma_jfr_t *jfr);
+urma_status_t udma_u_delete_jfr_batch(urma_jfr_t **jfr, int jfr_cnt, urma_jfr_t **bad_jfr);
 urma_status_t udma_u_post_jfr_wr(urma_jfr_t *jfr, urma_jfr_wr_t *wr,
 				 urma_jfr_wr_t **bad_wr);
 int udma_verify_modify_jfr(struct udma_u_jfr *jfr, uint32_t jfr_limit);

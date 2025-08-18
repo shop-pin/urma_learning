@@ -224,6 +224,41 @@ urma_status_t udma_u_delete_jfr(urma_jfr_t *jfr)
 	return URMA_SUCCESS;
 }
 
+urma_status_t udma_u_delete_jfr_batch(urma_jfr_t **jfr, int jfr_cnt, urma_jfr_t **bad_jfr)
+{
+	struct udma_u_context *udma_ctx;
+	struct udma_u_jfr *udma_jfr;
+	int ret;
+	int i;
+
+	if (!jfr) {
+		UDMA_LOG_ERR("jfr array is null.\n");
+		return URMA_EINVAL;
+	}
+
+	if (!jfr_cnt) {
+		UDMA_LOG_ERR("jfr cnt is 0.\n");
+		return URMA_EINVAL;
+	}
+
+	for (i = 0; i < jfr_cnt; i++) {
+		udma_ctx = to_udma_u_ctx(jfr[i]->urma_ctx);
+		udma_jfr = to_udma_u_jfr(jfr[i]);
+		udma_u_jetty_queue_remove(udma_ctx, &udma_jfr->rq, UDMA_U_JFR_TBL);
+	}
+
+	ret = urma_cmd_delete_jfr_batch(jfr, jfr_cnt, bad_jfr);
+	if (ret) {
+		UDMA_LOG_ERR("urma cmd delete jfr failed, ret = %d.\n", ret);
+		return URMA_FAIL;
+	}
+
+	for (i = 0; i < jfr_cnt; i++)
+		udma_u_free_jfr(jfr[i]);
+
+	return URMA_SUCCESS;
+}
+
 int udma_verify_modify_jfr(struct udma_u_jfr *jfr, uint32_t jfr_limit)
 {
 	if (jfr_limit > jfr->wqe_cnt) {
