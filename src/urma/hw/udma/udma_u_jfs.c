@@ -220,13 +220,41 @@ default_sge_num:
 	return wr->rw.src.num_sge > sq->max_sge_num;
 }
 
+static void handle_sq_inline(void *dst_addr, urma_sge_t *sgl, uint32_t i,
+			     struct udma_u_jetty_queue *sq)
+{
+	uint64_t tail_len;
+
+	if ((uint8_t *)dst_addr + sgl[i].len <= (uint8_t *)sq->qbuf_end) {
+		(void)memcpy(dst_addr, (void *)sgl[i].addr, sgl[i].len);
+	} else {
+		tail_len = (uint64_t)sq->qbuf_end - (uint64_t)dst_addr;
+		(void)memcpy(dst_addr, (void *)sgl[i].addr, tail_len);
+		(void)memcpy(sq->qbuf, (void *)(sgl[i].addr + tail_len), (uint64_t)sgl[i].len - tail_len);
+	}
+}
+
+static uint32_t get_max_inline_size(uint8_t opcode, uint32_t sq_inline_size)
+{
+	switch (opcode) {
+	case UDMA_OPCODE_WRITE_WITH_IMM:
+		return min(sq_inline_size, SQE_WRITE_IMM_INLINE_SIZE);
+	case UDMA_OPCODE_WRITE_WITH_NOTIFY:
+		return min(sq_inline_size, SQE_WRITE_NTF_INLINE_SIZE);
+	default:
+		return sq_inline_size;
+	}
+}
+
 static int udma_fill_send_sqe(struct udma_jfs_sqe_ctl *ctrl, urma_jfs_wr_t *wr,
 			      struct udma_u_jetty_queue *sq, urma_target_jetty_t *tjetty, uint32_t *wqe_cnt)
 {
 	struct udma_u_target_jetty *udma_tjetty;
 	struct udma_wqe_sge *sge;
+	uint32_t total_len = 0;
 	uint32_t sge_num = 0;
 	urma_sge_t *sgl;
+	void *dst_addr;
 	uint32_t i;
 
 	sgl = wr->send.src.sge;
@@ -234,17 +262,33 @@ static int udma_fill_send_sqe(struct udma_jfs_sqe_ctl *ctrl, urma_jfs_wr_t *wr,
 	sge = (struct udma_wqe_sge *)udma_inc_ptr_wrap((uint8_t *)ctrl, (uint32_t)sizeof(struct udma_jfs_sqe_ctl),
 						       (uint8_t *)sq->qbuf, (uint8_t *)sq->qbuf_end);
 
-	for (i = 0; i < wr->send.src.num_sge; i++) {
-		if (sgl[i].len == 0)
-			continue;
-		sge->length = sgl[i].len;
-		sge->va = sgl[i].addr;
-		sge = (struct udma_wqe_sge *)udma_inc_ptr_wrap((uint8_t *)sge,
-								(uint32_t)sizeof(struct udma_wqe_sge),
-								(uint8_t *)sq->qbuf, (uint8_t *)sq->qbuf_end);
-		sge_num++;
+	if (wr->flag.bs.inline_flag) {
+		for (i = 0; i < wr->send.src.num_sge; i++) {
+			if (total_len + sgl[i].len > sq->max_inline_size) {
+				UDMA_LOG_ERR("inline_size %u is over max_size %u.\n",
+					     total_len + sgl[i].len, sq->max_inline_size);
+				return EINVAL;
+			}
+			dst_addr = udma_inc_ptr_wrap((uint8_t *)sge, total_len,
+						     (uint8_t *)sq->qbuf, (uint8_t *)sq->qbuf_end);
+			handle_sq_inline(dst_addr, sgl, i, sq);
+			total_len += sgl[i].len;
+		}
+		ctrl->inline_msg_len = total_len;
+		*wqe_cnt = (SQE_NORMAL_CTL_LEN + total_len - 1) / UDMA_JFS_WQEBB + 1;
+	} else {
+		for (i = 0; i < wr->send.src.num_sge; i++) {
+			if (sgl[i].len == 0)
+				continue;
+			sge->length = sgl[i].len;
+			sge->va = sgl[i].addr;
+			sge = (struct udma_wqe_sge *)udma_inc_ptr_wrap((uint8_t *)sge,
+								       (uint32_t)sizeof(struct udma_wqe_sge),
+								       (uint8_t *)sq->qbuf, (uint8_t *)sq->qbuf_end);
+			sge_num++;
+		}
+		*wqe_cnt = (SQE_NORMAL_CTL_LEN + (sge_num - 1) * UDMA_SGE_SIZE) / UDMA_JFS_WQEBB + 1;
 	}
-	*wqe_cnt = (SQE_NORMAL_CTL_LEN + (sge_num - 1) * UDMA_SGE_SIZE) / UDMA_JFS_WQEBB + 1;
 
 	ctrl->sge_num = sge_num;
 	udma_tjetty = to_udma_u_target_jetty(tjetty);
@@ -261,28 +305,48 @@ static int udma_fill_write_sqe(struct udma_jfs_sqe_ctl *ctrl, urma_jfs_wr_t *wr,
 {
 	struct udma_u_segment *udma_seg;
 	struct udma_wqe_sge *sge;
+	uint32_t inline_size = 0;
+	uint32_t total_len = 0;
 	uint32_t sge_num = 0;
 	uint32_t ctrl_len;
 	urma_sge_t *sgl;
+	void *dst_addr;
 	uint32_t i;
 
 	sgl = wr->rw.src.sge;
 	ctrl_len = get_ctl_len(wqe_info->opcode);
+	inline_size = get_max_inline_size(wqe_info->opcode, sq->max_inline_size);
 
 	sge = (struct udma_wqe_sge *)udma_inc_ptr_wrap((uint8_t *)ctrl, ctrl_len, (uint8_t *)sq->qbuf,
 						       (uint8_t *)sq->qbuf_end);
 
-	for (i = 0; i < wr->rw.src.num_sge; i++) {
-		if (sgl[i].len == 0)
-			continue;
-		sge->length = sgl[i].len;
-		sge->va = sgl[i].addr;
-		sge = (struct udma_wqe_sge *)udma_inc_ptr_wrap((uint8_t *)sge,
-								(uint32_t)sizeof(struct udma_wqe_sge),
-								(uint8_t *)sq->qbuf, (uint8_t *)sq->qbuf_end);
-		sge_num++;
+	if (wr->flag.bs.inline_flag) {
+		for (i = 0; i < wr->rw.src.num_sge; i++) {
+			if (total_len + sgl[i].len > inline_size) {
+				UDMA_LOG_ERR("inline_size %u is over max_size %u.\n",
+					     total_len + sgl[i].len, inline_size);
+				return EINVAL;
+			}
+			dst_addr = udma_inc_ptr_wrap((uint8_t *)sge, total_len,
+						     (uint8_t *)sq->qbuf, (uint8_t *)sq->qbuf_end);
+			handle_sq_inline(dst_addr, sgl, i, sq);
+			total_len += sgl[i].len;
+		}
+		ctrl->inline_msg_len = total_len;
+		wqe_info->wqe_cnt = (ctrl_len + total_len - 1) / UDMA_JFS_WQEBB + 1;
+	} else {
+		for (i = 0; i < wr->rw.src.num_sge; i++) {
+			if (sgl[i].len == 0)
+				continue;
+			sge->length = sgl[i].len;
+			sge->va = sgl[i].addr;
+			sge = (struct udma_wqe_sge *)udma_inc_ptr_wrap((uint8_t *)sge,
+								       (uint32_t)sizeof(struct udma_wqe_sge),
+								       (uint8_t *)sq->qbuf, (uint8_t *)sq->qbuf_end);
+			sge_num++;
+		}
+		wqe_info->wqe_cnt = (ctrl_len + (sge_num - 1) * UDMA_SGE_SIZE) / UDMA_JFS_WQEBB + 1;
 	}
-	wqe_info->wqe_cnt = (ctrl_len + (sge_num - 1) * UDMA_SGE_SIZE) / UDMA_JFS_WQEBB + 1;
 
 	sgl = wr->rw.dst.sge;
 	udma_seg = to_udma_u_seg(sgl[0].tseg);
@@ -493,8 +557,10 @@ static bool udma_check_sq_overflow(struct udma_u_jetty_queue *sq, urma_jfs_wr_t 
 				   struct udma_wqe_info *wqe_info)
 {
 	uint32_t wqe_bb_cnt = MAX_SQE_BB_NUM;
+	uint32_t max_inline_size = 0;
 	uint32_t wqe_ctrl_len = 0;
 	uint32_t num_sge_wr = 0;
+	uint32_t total_len = 0;
 	uint32_t udma_opcode;
 	uint32_t sge_num = 0;
 	urma_sge_t *sgl;
@@ -528,10 +594,23 @@ static bool udma_check_sq_overflow(struct udma_u_jetty_queue *sq, urma_jfs_wr_t 
 		sgl = wr->rw.dst.sge;
 	}
 
-	for (i = 0; i < num_sge_wr; i++)
-		sgl[i].len == 0 ? 0 : sge_num++;
+	if (wr->flag.bs.inline_flag && udma_opcode != UDMA_OPCODE_READ) {
+		max_inline_size = get_max_inline_size(udma_opcode, sq->max_inline_size);
+		for (i = 0; i < num_sge_wr; i++) {
+			total_len += sgl[i].len;
+			if (total_len > max_inline_size) {
+				UDMA_LOG_ERR("inline_size %u is over max_size %u.\n",
+					      total_len, max_inline_size);
+				return true;
+			}
+		}
+		wqe_bb_cnt = (wqe_ctrl_len + total_len - 1) / UDMA_JFS_WQEBB + 1;
+	} else {
+		for (i = 0; i < num_sge_wr; i++)
+			sgl[i].len == 0 ? 0 : sge_num++;
 
-	wqe_bb_cnt = (wqe_ctrl_len + (sge_num - 1) * UDMA_SGE_SIZE) / UDMA_JFS_WQEBB + 1;
+		wqe_bb_cnt = (wqe_ctrl_len + (sge_num - 1) * UDMA_SGE_SIZE) / UDMA_JFS_WQEBB + 1;
+	}
 
 	return udma_sq_overflow(sq, wqe_bb_cnt);
 }
