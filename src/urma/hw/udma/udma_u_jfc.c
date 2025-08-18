@@ -573,6 +573,17 @@ urma_status_t udma_u_modify_jfc(urma_jfc_t *jfc, urma_jfc_attr_t *attr)
 	return URMA_SUCCESS;
 }
 
+urma_status_t udma_u_get_async_event(urma_context_t *ctx,
+				     urma_async_event_t *event)
+{
+	return urma_cmd_get_async_event(ctx, event);
+}
+
+void udma_u_ack_async_event(urma_async_event_t *event)
+{
+	urma_cmd_ack_async_event(event);
+}
+
 void udma_u_clean_jfc(struct urma_jfc *jfc, uint32_t jetty_id)
 {
 	struct udma_u_context *udma_ctx = to_udma_u_ctx(jfc->urma_ctx);

@@ -72,5 +72,8 @@ urma_status_t udma_u_rearm_jfc(urma_jfc_t *jfc, bool solicited_only);
 urma_jfce_t *udma_u_create_jfce(urma_context_t *ctx);
 urma_status_t udma_u_delete_jfce(urma_jfce_t *jfce);
 urma_status_t udma_u_modify_jfc(urma_jfc_t *jfc, urma_jfc_attr_t *attr);
+urma_status_t udma_u_get_async_event(urma_context_t *ctx,
+				     urma_async_event_t *event);
+void udma_u_ack_async_event(urma_async_event_t *event);
 void udma_u_clean_jfc(struct urma_jfc *jfc, uint32_t jetty_id);
 #endif /* __UDMA_U_JFC_H__ */
