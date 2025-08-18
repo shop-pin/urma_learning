@@ -2,6 +2,12 @@ aux_source_directory(${CMAKE_CURRENT_LIST_DIR} PROVIDER_UB_DIR_SRCS)
 
 add_library(BETA_UDMA_SO SHARED ${PROVIDER_UB_DIR_SRCS})
 
+# ST64B DISABLE
+if("${UDMA_ST64B}" STREQUAL "enable")
+    add_definitions(-DST64B)
+    message(STATUS "SUPPORT ST64B!")
+endif()
+
 target_include_directories(BETA_UDMA_SO PRIVATE ${CMAKE_SOURCE_DIR}/urma/lib/urma/core)
 target_include_directories(BETA_UDMA_SO PRIVATE ${CMAKE_SOURCE_DIR}/urma/lib/urma/core/include)
 target_include_directories(BETA_UDMA_SO PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/kernel_headers)

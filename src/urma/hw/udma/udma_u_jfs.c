@@ -167,6 +167,37 @@ urma_status_t udma_u_delete_jfs(urma_jfs_t *jfs)
 	return URMA_SUCCESS;
 }
 
+#ifdef ST64B
+static void st64b(uint64_t *src, uint64_t *dst)
+{
+	asm volatile (
+		"mov x9, %0\n"
+		"mov x10, %1\n"
+		"ldr x0, [x9]\n"
+		"ldr x1, [x9, #8]\n"
+		"ldr x2, [x9, #16]\n"
+		"ldr x3, [x9, #24]\n"
+		"ldr x4, [x9, #32]\n"
+		"ldr x5, [x9, #40]\n"
+		"ldr x6, [x9, #48]\n"
+		"ldr x7, [x9, #56]\n"
+		".inst 0xf83f9140\n"
+		::"r" (src), "r"(dst):"cc", "memory"
+	);
+}
+#endif
+
+static void udma_write_dsqe(struct udma_u_jetty_queue *sq,
+			    struct udma_jfs_sqe_ctl *ctrl)
+{
+	ctrl->sqe_bb_idx = sq->pi;
+#ifdef ST64B
+	st64b(((uint64_t *)ctrl), (uint64_t *)sq->dwqe_addr);
+#else
+	mmio_memcpy_x64((uint64_t *)sq->dwqe_addr, (uint64_t *)ctrl);
+#endif
+}
+
 static bool udma_check_sge_num_and_opcode(urma_opcode_t opcode, struct udma_u_jetty_queue *sq,
 					  urma_jfs_wr_t *wr, uint8_t *udma_opcode)
 {
@@ -679,6 +710,8 @@ urma_status_t udma_u_post_one_wr(struct udma_u_context *udma_ctx,
 		return ret;
 
 	wqebb_cnt = wqe_info.wqe_cnt;
+	if (wqebb_cnt == 1 && udma_ctx->dwqe_enable)
+		*dwqe_enable = true;
 
 	*wqe_addr = (struct udma_jfs_sqe_ctl *)sq->qbuf_curr;
 
@@ -716,7 +749,11 @@ urma_status_t udma_u_post_sq_wr(struct udma_u_context *udma_ctx,
 
 	if (wr_cnt) {
 		udma_to_device_barrier();
-		udma_update_sq_db(sq);
+
+		if (wr_cnt == 1 && dwqe_enable && (sq->pi - sq->ci == 1))
+			udma_write_dsqe(sq, wqe_addr);
+		else
+			udma_update_sq_db(sq);
 	}
 
 	(void)pthread_spin_unlock(&sq->lock);

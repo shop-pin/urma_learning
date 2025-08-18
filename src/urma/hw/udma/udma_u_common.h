@@ -61,6 +61,7 @@ struct udma_u_context {
 	pthread_mutex_t		db_list_mutex;
 	struct udma_u_doorbell	db;
 	uint8_t			cqe_size;
+	bool			dwqe_enable;
 	uint32_t		ue_id;
 	uint32_t		chip_id;
 	uint32_t		die_id;
@@ -224,6 +225,11 @@ static inline uint64_t roundup_pow_of_two(uint64_t n)
 static inline unsigned long align(unsigned long val, unsigned long align)
 {
 	return (val + align - 1UL) & ~(align - 1UL);
+}
+
+static inline void mmio_memcpy_x64(uint64_t *dest, uint64_t *val)
+{
+	vst4q_u64(dest, vld4q_u64(val));
 }
 
 static inline struct udma_u_context *to_udma_u_ctx(urma_context_t *ctx)

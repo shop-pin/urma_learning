@@ -276,6 +276,9 @@ tools of ums, contains ums_run
 %if %{with dlock}
     -DBUILD_DLOCK="enable" \
 %endif
+%if %{without udma_stb64_disable}
+    -DUDMA_ST64B="enable" \
+%endif
 
 make %{?_smp_mflags}
 
