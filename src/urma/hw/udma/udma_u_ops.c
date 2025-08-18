@@ -30,10 +30,12 @@ static urma_ops_t g_udma_ops = {
 	.create_jetty = udma_u_create_jetty,
 	.delete_jetty = udma_u_delete_jetty,
 	.unimport_jetty = udma_u_unimport_jetty,
+	.unbind_jetty = udma_u_unbind_jetty,
 	.create_jetty_grp = udma_u_create_jetty_grp,
 	.delete_jetty_grp = udma_u_delete_jetty_grp,
 	.import_jetty_ex = udma_u_import_jetty_ex,
 	.import_jfr_ex = udma_u_import_jfr_ex,
+	.bind_jetty_ex = udma_u_bind_jetty_ex,
 };
 
 static urma_status_t udma_u_init(urma_init_attr_t *conf)

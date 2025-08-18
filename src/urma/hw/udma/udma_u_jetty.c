@@ -402,3 +402,47 @@ urma_target_jetty_t *udma_u_import_jetty_ex(urma_context_t *ctx,
 
 	return &tjetty->urma_tjetty;
 }
+
+urma_status_t udma_u_bind_jetty_ex(urma_jetty_t *jetty,
+				   urma_target_jetty_t *tjetty,
+				   urma_active_tp_cfg_t *active_tp_cfg)
+{
+	struct udma_u_target_jetty *udma_tjetty = to_udma_u_target_jetty(tjetty);
+	struct udma_u_jetty *udma_jetty = to_udma_u_jetty(jetty);
+	int ret;
+
+	if (udma_jetty->sq.trans_mode != URMA_TM_RC ||
+	    tjetty->trans_mode != URMA_TM_RC) {
+		UDMA_LOG_ERR("The transmode of Jetty or tJetty in exp is not rc.\n");
+		return URMA_EINVAL;
+	}
+
+	if (udma_jetty->sq.tjetty == udma_tjetty) {
+		UDMA_LOG_INFO("reentry bind jetty in exp, jetty_id = %u, tjetty_id = %u.\n",
+			      jetty->jetty_id.id, tjetty->id.id);
+		return URMA_SUCCESS;
+	}
+
+	if (udma_jetty->sq.tjetty != NULL) {
+		UDMA_LOG_ERR("The rc Jetty has bound a remote Jetty in exp,"
+			     "jetty_id = %u.\n", jetty->jetty_id.id);
+		return URMA_EEXIST;
+	}
+
+	if (tjetty->tp.tpn != INVALID_TPN) {
+		UDMA_LOG_ERR("the target jetty has been bound in exp, id = %u.\n",
+			     tjetty->id.id);
+		return URMA_EINVAL;
+	}
+
+	ret = urma_cmd_bind_jetty_ex(jetty, tjetty,
+				     (urma_bind_jetty_ex_cfg_t *)active_tp_cfg, NULL);
+	if (ret != 0) {
+		UDMA_LOG_ERR("urma cmd bind jetty in exp failed, ret = %d.\n", ret);
+		return URMA_FAIL;
+	}
+
+	udma_jetty->sq.tjetty = udma_tjetty;
+
+	return URMA_SUCCESS;
+}
