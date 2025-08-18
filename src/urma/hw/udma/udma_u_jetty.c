@@ -428,6 +428,31 @@ urma_status_t udma_u_delete_jetty_grp(urma_jetty_grp_t *jetty_grp)
 	return URMA_SUCCESS;
 }
 
+int udma_u_flush_jetty(urma_jetty_t *jetty, int cr_cnt, urma_cr_t *cr)
+{
+	struct udma_u_jetty *udma_u_jetty = to_udma_u_jetty(jetty);
+	struct udma_u_jetty_queue *sq = &udma_u_jetty->sq;
+	uint32_t local_id = jetty->jetty_id.id;
+	int n_flushed;
+
+	if (!sq->flush_flag)
+		return 0;
+
+	if (!sq->lock_free)
+		(void)pthread_spin_lock(&sq->lock);
+
+	for (n_flushed = 0; n_flushed < cr_cnt; n_flushed++) {
+		if (sq->ci == sq->pi)
+			break;
+		udma_u_flush_sq(local_id, sq, cr + n_flushed, true);
+	}
+
+	if (!sq->lock_free)
+		(void)pthread_spin_unlock(&sq->lock);
+
+	return n_flushed;
+}
+
 urma_status_t udma_u_query_jetty(urma_jetty_t *jetty, urma_jetty_cfg_t *cfg,
 				 urma_jetty_attr_t *attr)
 {

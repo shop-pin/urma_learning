@@ -34,6 +34,7 @@ urma_status_t udma_u_query_jetty(urma_jetty_t *jetty,
 urma_jetty_grp_t *udma_u_create_jetty_grp(urma_context_t *ctx,
 					  urma_jetty_grp_cfg_t *cfg);
 urma_status_t udma_u_delete_jetty_grp(urma_jetty_grp_t *jetty_grp);
+int udma_u_flush_jetty(urma_jetty_t *jetty, int cr_cnt, urma_cr_t *cr);
 int exec_jetty_create_cmd(urma_context_t *ctx, struct udma_u_jetty *jetty,
 			  urma_jetty_cfg_t *cfg);
 int init_jetty_trans_mode(struct udma_u_jetty *jetty,
