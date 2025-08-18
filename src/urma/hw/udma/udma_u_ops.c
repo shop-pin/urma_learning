@@ -15,6 +15,7 @@
 #include "udma_u_jfr.h"
 #include "udma_u_jetty.h"
 #include "udma_u_db.h"
+#include "udma_u_ctrlq_tp.h"
 #include "udma_u_ops.h"
 
 /* udma_u_xx_ex interface thanks to rdma-core-master/providers/hns/hns_roce_u.c code. */
@@ -33,6 +34,7 @@ static urma_ops_t g_udma_ops = {
 	.unbind_jetty = udma_u_unbind_jetty,
 	.create_jetty_grp = udma_u_create_jetty_grp,
 	.delete_jetty_grp = udma_u_delete_jetty_grp,
+	.get_tp_list = udma_u_ctrlq_get_tp_list,
 	.import_jetty_ex = udma_u_import_jetty_ex,
 	.import_jfr_ex = udma_u_import_jfr_ex,
 	.bind_jetty_ex = udma_u_bind_jetty_ex,
