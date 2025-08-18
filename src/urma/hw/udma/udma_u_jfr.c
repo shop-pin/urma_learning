@@ -383,6 +383,20 @@ urma_status_t udma_u_post_jfr_wr(urma_jfr_t *jfr, urma_jfr_wr_t *wr,
 	return ret;
 }
 
+urma_status_t udma_u_query_jfr(urma_jfr_t *jfr, urma_jfr_cfg_t *cfg,
+			       urma_jfr_attr_t *attr)
+{
+	int ret;
+
+	ret = urma_cmd_query_jfr(jfr, cfg, attr);
+	if (ret) {
+		UDMA_LOG_ERR("failed to query jfr in urma cmd, ret = %d.\n", ret);
+		return URMA_FAIL;
+	}
+
+	return URMA_SUCCESS;
+}
+
 urma_target_jetty_t *udma_u_import_jfr_ex(urma_context_t *ctx,
 					  urma_rjfr_t *rjfr,
 					  urma_token_t *token_value,

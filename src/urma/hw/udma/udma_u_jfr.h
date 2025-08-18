@@ -44,6 +44,8 @@ urma_status_t udma_u_post_jfr_wr(urma_jfr_t *jfr, urma_jfr_wr_t *wr,
 int udma_verify_modify_jfr(struct udma_u_jfr *jfr, uint32_t jfr_limit);
 urma_status_t udma_u_unimport_jfr(urma_target_jetty_t *target_jfr);
 urma_status_t udma_u_modify_jfr(urma_jfr_t *jfr, urma_jfr_attr_t *attr);
+urma_status_t udma_u_query_jfr(urma_jfr_t *jfr, urma_jfr_cfg_t *cfg,
+			       urma_jfr_attr_t *attr);
 int udma_u_verify_jfr_param(urma_context_t *ctx, urma_jfr_cfg_t *cfg);
 void udma_u_init_jfr_param(struct udma_u_jfr *jfr, urma_jfr_cfg_t *cfg);
 int exec_jfr_create_cmd(urma_context_t *ctx, struct udma_u_jfr *jfr,
