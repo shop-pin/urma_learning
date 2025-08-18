@@ -1,0 +1,31 @@
+aux_source_directory(${CMAKE_CURRENT_LIST_DIR} PROVIDER_UB_DIR_SRCS)
+
+add_library(BETA_UDMA_SO SHARED ${PROVIDER_UB_DIR_SRCS})
+
+target_include_directories(BETA_UDMA_SO PRIVATE ${CMAKE_SOURCE_DIR}/urma/lib/urma/include)
+target_include_directories(BETA_UDMA_SO PRIVATE ${CMAKE_SOURCE_DIR}/urma/lib/urma/core)
+target_include_directories(BETA_UDMA_SO PRIVATE ${CMAKE_SOURCE_DIR}/urma/include)
+target_include_directories(BETA_UDMA_SO PRIVATE ${CMAKE_SOURCE_DIR}/urma/include/common)
+
+target_link_libraries(BETA_UDMA_SO PRIVATE urma)
+target_link_libraries(BETA_UDMA_SO PRIVATE urma_common)
+
+set(UDMA_NAME urma-udma)
+set_target_properties(BETA_UDMA_SO PROPERTIES OUTPUT_NAME ${UDMA_NAME})
+
+set(CMAKE_C_FLAGS "-Wall -Wextra -O2 -Wfloat-equal -fno-common -std=gnu99 -Werror=implicit-function-declaration")
+set(CMAKE_LD_FLAGS "-s")
+
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wuninitialized -Wno-error -Wno-error=format -Wundef")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wunused -Wdate-time -Wshadow -Wvla -Wdisabled-optimization")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wempty-body -Wignored-qualifiers -Wimplicit-fallthrough=3")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wtype-limits -Wshift-negative-value -Wswitch-default")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wframe-larger-than=8192 -Wshift-overflow=2 -Wwrite-strings")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wmissing-format-attribute -Wformat-nonliteral -Wduplicated-cond")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wtrampolines -Wlogical-op -Wsuggest-attribute=format")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wduplicated-branches -Wmissing-include-dirs -Wformat-signedness")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wmissing-declarations -Wreturn-local-addr -Wredundant-decls")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wfloat-conversion -Wmissing-prototypes -Wstrict-prototypes")
+
+include(GNUInstallDirs)
+install(TARGETS BETA_UDMA_SO LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}/urma OPTIONAL)
