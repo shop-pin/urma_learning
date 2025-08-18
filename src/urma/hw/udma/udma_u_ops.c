@@ -38,6 +38,8 @@ static urma_ops_t g_udma_ops = {
 	.unbind_jetty = udma_u_unbind_jetty,
 	.create_jetty_grp = udma_u_create_jetty_grp,
 	.delete_jetty_grp = udma_u_delete_jetty_grp,
+	.create_jfce = udma_u_create_jfce,
+	.delete_jfce = udma_u_delete_jfce,
 	.get_tp_list = udma_u_ctrlq_get_tp_list,
 	.import_jetty_ex = udma_u_import_jetty_ex,
 	.import_jfr_ex = udma_u_import_jfr_ex,
@@ -47,6 +49,9 @@ static urma_ops_t g_udma_ops = {
 	.post_jetty_send_wr = udma_u_post_jetty_send_wr,
 	.post_jetty_recv_wr = udma_u_post_jetty_recv_wr,
 	.poll_jfc = udma_u_poll_jfc,
+	.rearm_jfc = udma_u_rearm_jfc,
+	.wait_jfc = udma_u_wait_jfc,
+	.ack_jfc = udma_u_ack_jfc,
 };
 
 static urma_status_t udma_u_init(urma_init_attr_t *conf)

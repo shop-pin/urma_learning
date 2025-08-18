@@ -437,6 +437,80 @@ int udma_u_poll_jfc(urma_jfc_t *jfc, int cr_cnt, urma_cr_t *cr)
 	return ret == JFC_POLL_ERR ? -UDMA_INTER_ERR : npolled;
 }
 
+int udma_u_wait_jfc(urma_jfce_t *jfce, uint32_t jfc_cnt, int time_out,
+		    urma_jfc_t *jfc[])
+{
+	return urma_cmd_wait_jfc(jfce->fd, jfc_cnt, time_out, jfc);
+}
+
+void udma_u_ack_jfc(urma_jfc_t *jfc[], uint32_t nevents[], uint32_t jfc_cnt)
+{
+	struct udma_u_jfc *udma_jfc;
+	uint32_t i;
+
+	for (i = 0; i < jfc_cnt; i++) {
+		if (!jfc[i] || !nevents[i])
+			continue;
+		udma_jfc = to_udma_u_jfc(jfc[i]);
+		udma_jfc->arm_sn++;
+	}
+
+	return urma_cmd_ack_jfc(jfc, nevents, jfc_cnt);
+}
+
+urma_status_t udma_u_rearm_jfc(urma_jfc_t *jfc, bool solicited_only)
+{
+	struct udma_u_context *udma_ctx = to_udma_u_ctx(jfc->urma_ctx);
+	struct udma_u_jfc *udma_jfc = to_udma_u_jfc(jfc);
+	struct udma_jfc_db db;
+
+	db.ci = udma_jfc->cq.ci & UDMA_U_JFC_DB_CI_IDX_M;
+	db.notify = solicited_only;
+	db.arm_sn = udma_jfc->arm_sn;
+	db.type = UDMA_CQ_ARM_DB;
+	db.jfcn = udma_jfc->cq.idx;
+
+	udma_u_write64((uint64_t *)(udma_ctx->db.addr + UDMA_JFC_HW_DB_OFFSET),
+		       (uint64_t *)&db);
+
+	return URMA_SUCCESS;
+}
+
+urma_jfce_t *udma_u_create_jfce(urma_context_t *ctx)
+{
+	urma_jfce_t *jfce =
+		(urma_jfce_t *)calloc(1, sizeof(urma_jfce_t));
+
+	if (!jfce) {
+		UDMA_LOG_ERR("jfce memory allocation failed.\n");
+		return NULL;
+	}
+	jfce->urma_ctx = ctx;
+
+	jfce->fd = urma_cmd_create_jfce(ctx);
+	if (jfce->fd < 0) {
+		UDMA_LOG_ERR("ubcore create jfce failed, fd = %d.\n",
+			     jfce->fd);
+		free(jfce);
+		return NULL;
+	}
+
+	return jfce;
+}
+
+urma_status_t udma_u_delete_jfce(urma_jfce_t *jfce)
+{
+	if (jfce->fd < 0) {
+		UDMA_LOG_ERR("invalid parameter, fd = %d.\n", jfce->fd);
+		return URMA_EINVAL;
+	}
+	(void)close(jfce->fd);
+
+	free(jfce);
+
+	return URMA_SUCCESS;
+}
+
 static int udma_u_check_jfc_cqe_period(uint16_t cqe_period)
 {
 	uint16_t period[] = {

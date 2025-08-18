@@ -330,6 +330,12 @@ static inline struct udma_u_segment *to_udma_u_seg(urma_target_seg_t *seg)
 	return container_of(seg, struct udma_u_segment, urma_tseg);
 }
 
+static inline void udma_u_write64(uint64_t *dest, uint64_t *val)
+{
+	atomic_store_explicit((_Atomic(uint64_t) *)(void *)dest,
+			      (uint64_t)(*val), memory_order_relaxed);
+}
+
 static inline struct udma_u_jetty_queue
 *to_udma_jetty_queue(struct udma_u_hmap_node *node)
 {
