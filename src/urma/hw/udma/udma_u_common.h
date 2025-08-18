@@ -195,6 +195,8 @@ struct udma_u_target_jetty {
 #define GENMASK(h, l) \
 	(((~0UL) << (l)) & (~0UL >> (UDMA_BITS_PER_LONG - 1 - (h))))
 
+#define BIT(nr) (1UL << (nr))
+
 #ifndef container_of
 #define container_off(containing_type, member)                                 \
 	offsetof(containing_type, member)
@@ -207,6 +209,8 @@ struct udma_u_target_jetty {
 
 #define udma_to_device_barrier() {asm volatile("dsb st" ::: "memory"); }
 #define udma_from_device_barrier() {asm volatile("dsb ld" ::: "memory"); }
+
+#define ARRAY_SIZE(ARRAY) (sizeof(ARRAY) / sizeof((ARRAY)[0]))
 
 static inline void udma_u_set_udata(urma_cmd_udrv_priv_t *udrv_data,
 				    void *in_addr, uint32_t in_len,

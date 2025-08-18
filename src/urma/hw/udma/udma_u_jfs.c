@@ -28,6 +28,47 @@ static uint32_t get_ctl_len(uint8_t opcode)
 	}
 }
 
+static uint32_t get_sge_num(uint8_t opcode, struct udma_jfs_sqe_ctl *wqe_ctl)
+{
+	switch (opcode) {
+	case UDMA_OPCODE_CAS:
+	case UDMA_OPCODE_FAA:
+		return UDMA_ATOMIC_SGE_NUM + 1;
+	default:
+		return wqe_ctl->sge_num;
+	}
+}
+
+static uint32_t get_wqebb_cnt(struct udma_jfs_sqe_ctl *wqe_ctl)
+{
+	uint8_t opcode = wqe_ctl->opcode;
+	uint32_t sqe_ctl_len = get_ctl_len(opcode);
+	uint32_t inline_len;
+	uint32_t sge_num;
+
+	switch (opcode) {
+	case UDMA_OPCODE_SEND:
+	case UDMA_OPCODE_SEND_WITH_IMM:
+	case UDMA_OPCODE_SEND_WITH_INVALID:
+	case UDMA_OPCODE_WRITE:
+	case UDMA_OPCODE_WRITE_WITH_IMM:
+	case UDMA_OPCODE_WRITE_WITH_NOTIFY:
+		if (wqe_ctl->flag & UDMAWQE_INLINE_EN) {
+			inline_len = wqe_ctl->inline_msg_len;
+			return (sqe_ctl_len + inline_len - 1) / UDMA_JFS_WQEBB + 1;
+		}
+		break;
+	case UDMA_OPCODE_NOP:
+		return NOP_WQEBB_CNT;
+	default:
+		break;
+	}
+
+	sge_num = get_sge_num(opcode, wqe_ctl);
+
+	return sq_cal_wqebb_num(sqe_ctl_len, sge_num, UDMA_JFS_WQEBB);
+}
+
 static bool udma_check_atomic_len(uint32_t len, uint8_t opcode)
 {
 	switch (len) {
@@ -834,4 +875,138 @@ urma_status_t udma_u_query_jfs(urma_jfs_t *jfs, urma_jfs_cfg_t *cfg,
 	}
 
 	return URMA_SUCCESS;
+}
+
+static void copy_from_sq(struct udma_u_jetty_queue *sq, uint32_t wqebb_cnt,
+			 struct udma_jfs_wqebb *tmp_sq)
+{
+	uint32_t remain = sq->baseblk_cnt - (sq->ci & (sq->baseblk_cnt - 1));
+	uint32_t field_h;
+	uint32_t field_l;
+	uint32_t offset;
+
+	offset = (sq->ci & (sq->baseblk_cnt - 1)) * UDMA_JFS_WQEBB;
+	field_h = remain > wqebb_cnt ? wqebb_cnt : remain;
+	field_l = wqebb_cnt > field_h ? wqebb_cnt - field_h : 0;
+
+	(void)memcpy((void *)tmp_sq, sq->qbuf + offset, field_h * sizeof(struct udma_jfs_wqebb));
+
+	if (field_l)
+		(void)memcpy(tmp_sq + field_h, sq->qbuf, field_l * sizeof(struct udma_jfs_wqebb));
+}
+
+static void udma_u_process_opcode_for_cr(struct udma_jfs_sqe_ctl *wqe_ctl,
+					 urma_cr_t *cr)
+{
+	uint8_t opcode;
+
+	opcode = wqe_ctl->opcode;
+
+	switch (opcode) {
+	case UDMA_OPCODE_SEND:
+	case UDMA_OPCODE_WRITE:
+	case UDMA_OPCODE_READ:
+	case UDMA_OPCODE_CAS:
+	case UDMA_OPCODE_FAA:
+	case UDMA_OPCODE_WRITE_WITH_NOTIFY:
+		break;
+	case UDMA_OPCODE_SEND_WITH_IMM:
+		memcpy(&cr->imm_data, (void *)((char *)wqe_ctl + SQE_SEND_IMM_FIELD),
+		       sizeof(uint64_t));
+		break;
+	case UDMA_OPCODE_SEND_WITH_INVALID:
+		cr->invalid_token.token_id = wqe_ctl->rmt_addr_l_or_token_id & UDMA_SQE_CTL_TOKEN_ID_BIT;
+		cr->invalid_token.token_value.token = wqe_ctl->rmt_addr_h_or_token_value;
+		break;
+	case UDMA_OPCODE_WRITE_WITH_IMM:
+		memcpy(&cr->imm_data, (void *)((char *)wqe_ctl + SQE_WRITE_IMM_FIELD),
+		       sizeof(uint64_t));
+		break;
+	default:
+		UDMA_LOG_ERR("invalid opcode %u when flush jfs.\n", opcode);
+		break;
+	}
+
+	/* Fill in UINT8_MAX for send direction */
+	cr->opcode = (urma_cr_opcode_t)UINT8_MAX;
+}
+
+static void fill_cr_by_wqe_ctl(struct udma_jfs_sqe_ctl *wqe_ctl,
+			       urma_cr_t *cr)
+{
+	struct udma_wqe_sge *sge;
+	uint32_t src_sge_num = 0;
+	uint64_t total_len = 0;
+	uint32_t ctrl_len;
+	uint32_t i;
+
+	(void)memset(cr, 0, sizeof(urma_cr_t));
+
+	cr->status = URMA_CR_WR_UNHANDLED;
+	udma_u_process_opcode_for_cr(wqe_ctl, cr);
+	cr->remote_id.id = wqe_ctl->rmt_jetty_or_seg_id;
+	cr->tpn = wqe_ctl->tp_id;
+
+	if (wqe_ctl->flag & UDMAWQE_INLINE_EN) {
+		cr->completion_len = wqe_ctl->inline_msg_len;
+		return;
+	}
+
+	src_sge_num = wqe_ctl->sge_num;
+	ctrl_len = get_ctl_len(wqe_ctl->opcode);
+	sge = (struct udma_wqe_sge *)((void *)((char *)wqe_ctl + ctrl_len));
+	for (i = 0; i < src_sge_num; i++) {
+		total_len += sge->length;
+		sge++;
+	}
+
+	if (total_len > UINT32_MAX) {
+		cr->completion_len = UINT32_MAX;
+		UDMA_LOG_WARN("total_len %lu is overflow.\n", total_len);
+	} else {
+		cr->completion_len = total_len;
+	}
+}
+
+void udma_u_flush_sq(uint32_t local_id, struct udma_u_jetty_queue *sq,
+		     urma_cr_t *cr, bool is_jetty)
+{
+	struct udma_jfs_wqebb tmp_sq[MAX_SQE_BB_NUM];
+	struct udma_jfs_sqe_ctl *wqe_ctl;
+	uint32_t wqebb_cnt;
+
+	copy_from_sq(sq, MAX_SQE_BB_NUM, tmp_sq);
+	wqe_ctl = (struct udma_jfs_sqe_ctl *)(void *)tmp_sq;
+	fill_cr_by_wqe_ctl(wqe_ctl, cr);
+	cr->local_id = local_id;
+	cr->user_ctx = sq->wrid[sq->ci & (sq->baseblk_cnt - 1)];
+	cr->flag.bs.jetty = is_jetty;
+
+	wqebb_cnt = get_wqebb_cnt(wqe_ctl);
+	sq->ci += wqebb_cnt;
+}
+
+int udma_u_flush_jfs(urma_jfs_t *jfs, int cr_cnt, urma_cr_t *cr)
+{
+	struct udma_u_jfs *udma_jfs = to_udma_u_jfs(jfs);
+	struct udma_u_jetty_queue *sq;
+	int n_flushed;
+
+	sq = &udma_jfs->sq;
+	if (!sq->flush_flag)
+		return 0;
+
+	if (!sq->lock_free)
+		(void)pthread_spin_lock(&sq->lock);
+
+	for (n_flushed = 0; n_flushed < cr_cnt; ++n_flushed) {
+		if (sq->ci == sq->pi)
+			break;
+		udma_u_flush_sq(jfs->jfs_id.id, sq, cr + n_flushed, false);
+	}
+
+	if (!sq->lock_free)
+		(void)pthread_spin_unlock(&sq->lock);
+
+	return n_flushed;
 }

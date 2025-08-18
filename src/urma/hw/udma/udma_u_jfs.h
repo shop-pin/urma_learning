@@ -90,7 +90,12 @@ enum udma_jfs_opcode {
 #define SQE_WRITE_NTF_INLINE_SIZE 176u
 #define UDMA_ATOMIC_WQE_BB_NUM 2
 #define UDMA_SQE_CTL_RMA_ADDR_BIT GENMASK(31, 0)
+#define UDMA_SQE_CTL_TOKEN_ID_BIT GENMASK(19, 0)
 #define UDMA_SQE_CTL_RMA_ADDR_OFFSET 32
+
+#define UDMASQE_FIELD_LOC(h, l)   ((uint64_t)(h) << 32 | (l))
+
+#define UDMAWQE_INLINE_EN 0x40
 
 #define SQE_SEND_IMM_FIELD 40
 #define SQE_WRITE_IMM_FIELD 48
@@ -146,6 +151,9 @@ void udma_u_delete_sq(struct udma_u_jetty_queue *sq);
 urma_status_t udma_u_modify_jfs(urma_jfs_t *jfs, urma_jfs_attr_t *jfs_attr);
 urma_status_t udma_u_query_jfs(urma_jfs_t *jfs, urma_jfs_cfg_t *cfg,
 			       urma_jfs_attr_t *attr);
+int udma_u_flush_jfs(urma_jfs_t *jfs, int cr_cnt, urma_cr_t *cr);
+void udma_u_flush_sq(uint32_t local_id, struct udma_u_jetty_queue *sq,
+		     urma_cr_t *cr, bool is_jetty);
 int udma_u_exec_jfs_create_cmd(urma_context_t *ctx,
 			       struct udma_u_jfs *jfs,
 			       urma_jfs_cfg_t *cfg);
