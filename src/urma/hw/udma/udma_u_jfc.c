@@ -286,10 +286,14 @@ static bool udma_u_update_jfr_idx(struct udma_u_context *udma_ctx,
 	if (!is_clean && cqe->inline_en != 0)
 		handle_recv_inl_cqe(cqe, opcode, jfr, cr);
 
-	(void)pthread_spin_lock(&jfr->lock);
+	if (!jfr->lock_free)
+		(void)pthread_spin_lock(&jfr->lock);
+
 	udma_bitmap_free_idx(jfr->idx_que.bitmap, jfr->idx_que.bitmap_cnt, entry_idx);
 	queue->ci++;
-	(void)pthread_spin_unlock(&jfr->lock);
+
+	if (!jfr->lock_free)
+		(void)pthread_spin_unlock(&jfr->lock);
 
 	return false;
 }

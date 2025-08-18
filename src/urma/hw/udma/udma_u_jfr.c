@@ -45,6 +45,7 @@ void udma_u_init_jfr_param(struct udma_u_jfr *jfr, urma_jfr_cfg_t *cfg)
 	jfr->rq.trans_mode  = cfg->trans_mode;
 	jfr->wqe_shift = udma_u_ilog32(roundup_pow_of_two(UDMA_SGE_SIZE *
 							  jfr->max_sge));
+	jfr->lock_free = cfg->flag.bs.lock_free;
 }
 
 static int udma_u_create_rq(struct udma_u_context *udma_ctx,
@@ -139,7 +140,8 @@ urma_jfr_t *udma_u_create_jfr(urma_context_t *ctx, urma_jfr_cfg_t *cfg)
 
 	udma_u_init_jfr_param(udma_jfr, cfg);
 
-	if (pthread_spin_init(&udma_jfr->lock, PTHREAD_PROCESS_PRIVATE))
+	if (!udma_jfr->lock_free &&
+	    pthread_spin_init(&udma_jfr->lock, PTHREAD_PROCESS_PRIVATE))
 		goto err_spin_init;
 
 	if (udma_u_alloc_jfr_idx_que(udma_jfr)) {
@@ -177,7 +179,8 @@ err_alloc_sw_db:
 err_create_rq:
 	udma_u_free_idx_que(&udma_jfr->idx_que);
 err_alloc_idx:
-	pthread_spin_destroy(&udma_jfr->lock);
+	if (!udma_jfr->lock_free)
+		pthread_spin_destroy(&udma_jfr->lock);
 err_spin_init:
 	free(udma_jfr);
 	return NULL;
@@ -197,7 +200,8 @@ static void udma_u_free_jfr(urma_jfr_t *jfr)
 
 	udma_u_free_idx_que(&udma_jfr->idx_que);
 
-	(void)pthread_spin_destroy(&udma_jfr->lock);
+	if (!udma_jfr->lock_free)
+		(void)pthread_spin_destroy(&udma_jfr->lock);
 
 	free(udma_jfr);
 }
@@ -305,8 +309,8 @@ urma_status_t udma_u_post_jfr_wr(urma_jfr_t *jfr, urma_jfr_wr_t *wr,
 	urma_status_t ret = URMA_SUCCESS;
 	uint32_t nreq;
 
-
-	(void)pthread_spin_lock(&udma_jfr->lock);
+	if (!udma_jfr->lock_free)
+		(void)pthread_spin_lock(&udma_jfr->lock);
 
 	for (nreq = 0; wr; ++nreq, wr = wr->next) {
 		ret = post_recv_one(udma_jfr, wr);
@@ -321,8 +325,8 @@ urma_status_t udma_u_post_jfr_wr(urma_jfr_t *jfr, urma_jfr_wr_t *wr,
 		*udma_jfr->sw_db = udma_jfr->rq.pi & UDMA_JFR_DB_PROD_IDX_M;
 	}
 
-
-	(void)pthread_spin_unlock(&udma_jfr->lock);
+	if (!udma_jfr->lock_free)
+		(void)pthread_spin_unlock(&udma_jfr->lock);
 
 	return ret;
 }
