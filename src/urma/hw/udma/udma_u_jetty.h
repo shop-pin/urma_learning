@@ -23,6 +23,9 @@ urma_status_t udma_u_unbind_jetty(urma_jetty_t *jetty);
 urma_status_t udma_u_post_jetty_send_wr(urma_jetty_t *urma_jetty,
 					urma_jfs_wr_t *wr,
 					urma_jfs_wr_t **bad_wr);
+urma_status_t udma_u_post_jetty_recv_wr(urma_jetty_t *urma_jetty,
+					urma_jfr_wr_t *wr,
+					urma_jfr_wr_t **bad_wr);
 urma_jetty_grp_t *udma_u_create_jetty_grp(urma_context_t *ctx,
 					  urma_jetty_grp_cfg_t *cfg);
 urma_status_t udma_u_delete_jetty_grp(urma_jetty_grp_t *jetty_grp);

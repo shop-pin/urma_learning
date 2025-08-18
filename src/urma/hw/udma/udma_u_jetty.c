@@ -296,6 +296,22 @@ urma_status_t udma_u_post_jetty_send_wr(urma_jetty_t *urma_jetty,
 	return ret;
 }
 
+urma_status_t udma_u_post_jetty_recv_wr(urma_jetty_t *urma_jetty,
+					urma_jfr_wr_t *wr,
+					urma_jfr_wr_t **bad_wr)
+{
+	struct udma_u_jetty *jetty = to_udma_u_jetty(urma_jetty);
+	urma_jfr_t *urma_jfr = &jetty->jfr->base;
+	urma_status_t ret;
+
+	ret = udma_u_post_jfr_wr(urma_jfr, wr, bad_wr);
+	if (ret)
+		UDMA_LOG_ERR("JETTY post jfr wr failed, ret = %d, id = %u.\n",
+			     ret, jetty->sq.idx);
+
+	return ret;
+}
+
 urma_status_t udma_u_unbind_jetty(urma_jetty_t *jetty)
 {
 	struct udma_u_jetty *udma_jetty = to_udma_u_jetty(jetty);
