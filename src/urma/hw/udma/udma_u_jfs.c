@@ -76,7 +76,10 @@ int udma_u_create_sq(struct udma_u_jetty_queue *sq, urma_jfs_cfg_t *cfg)
 {
 	uint32_t sqe_bb_cnt;
 
-	if (pthread_spin_init(&sq->lock, PTHREAD_PROCESS_PRIVATE))
+	sq->lock_free = cfg->flag.bs.lock_free;
+
+	if (!sq->lock_free &&
+	    pthread_spin_init(&sq->lock, PTHREAD_PROCESS_PRIVATE))
 		goto err_init_lock;
 
 	udma_u_init_sq_param(sq, cfg);
@@ -96,7 +99,8 @@ int udma_u_create_sq(struct udma_u_jetty_queue *sq, urma_jfs_cfg_t *cfg)
 	return 0;
 
 err_alloc_buf:
-	(void)pthread_spin_destroy(&sq->lock);
+	if (!sq->lock_free)
+		(void)pthread_spin_destroy(&sq->lock);
 err_init_lock:
 	return EINVAL;
 }
@@ -104,7 +108,9 @@ err_init_lock:
 void udma_u_delete_sq(struct udma_u_jetty_queue *sq)
 {
 	udma_u_free_queue_buf(sq);
-	(void)pthread_spin_destroy(&sq->lock);
+
+	if (!sq->lock_free)
+		(void)pthread_spin_destroy(&sq->lock);
 }
 
 urma_jfs_t *udma_u_create_jfs(urma_context_t *ctx, urma_jfs_cfg_t *cfg)
@@ -740,7 +746,8 @@ urma_status_t udma_u_post_sq_wr(struct udma_u_context *udma_ctx,
 	urma_jfs_wr_t *it;
 	int wr_cnt = 0;
 
-	(void)pthread_spin_lock(&sq->lock);
+	if (!sq->lock_free)
+		(void)pthread_spin_lock(&sq->lock);
 
 	for (it = wr; it != NULL; it = (urma_jfs_wr_t *)(void *)it->next) {
 		ret = udma_u_post_one_wr(udma_ctx, sq, it, &wqe_addr, &dwqe_enable);
@@ -760,7 +767,8 @@ urma_status_t udma_u_post_sq_wr(struct udma_u_context *udma_ctx,
 			udma_update_sq_db(sq);
 	}
 
-	(void)pthread_spin_unlock(&sq->lock);
+	if (!sq->lock_free)
+		(void)pthread_spin_unlock(&sq->lock);
 
 	return ret;
 }
