@@ -14,6 +14,7 @@
 #include "udma_u_jfs.h"
 #include "udma_u_jfr.h"
 #include "udma_u_jetty.h"
+#include "udma_u_tid.h"
 #include "udma_u_db.h"
 #include "udma_u_ctrlq_tp.h"
 #include "udma_u_ops.h"
@@ -52,6 +53,8 @@ static urma_ops_t g_udma_ops = {
 	.import_jetty_ex = udma_u_import_jetty_ex,
 	.import_jfr_ex = udma_u_import_jfr_ex,
 	.bind_jetty_ex = udma_u_bind_jetty_ex,
+	.alloc_token_id = udma_u_alloc_tid,
+	.free_token_id = udma_u_free_tid,
 	.get_async_event = udma_u_get_async_event,
 	.ack_async_event = udma_u_ack_async_event,
 	.post_jfs_wr = udma_u_post_jfs_wr,

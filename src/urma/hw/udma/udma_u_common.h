@@ -146,6 +146,11 @@ struct udma_u_jfc {
 	uint32_t cq_shift;
 };
 
+struct udma_u_tid {
+	urma_token_id_t base;
+	uint32_t tid;
+};
+
 struct udma_u_jetty_grp {
 	urma_jetty_grp_t base;
 	uint32_t jetty_cnt;
@@ -309,6 +314,11 @@ static inline uint32_t align_power2(uint32_t n)
 		res++;
 
 	return res;
+}
+
+static inline struct udma_u_tid *to_udma_u_tid(urma_token_id_t *key_id)
+{
+	return container_of(key_id, struct udma_u_tid, base);
 }
 
 static inline struct udma_u_jetty_grp *

@@ -14,6 +14,7 @@ target_include_directories(BETA_UDMA_SO PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/kern
 
 target_link_libraries(BETA_UDMA_SO PRIVATE urma)
 target_link_libraries(BETA_UDMA_SO PRIVATE urma_common)
+target_link_libraries(BETA_UDMA_SO PRIVATE ummu)
 
 set(UDMA_NAME urma-udma)
 set_target_properties(BETA_UDMA_SO PROPERTIES OUTPUT_NAME ${UDMA_NAME})
