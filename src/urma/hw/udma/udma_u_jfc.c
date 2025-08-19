@@ -10,6 +10,7 @@
 #include <errno.h>
 #include <string.h>
 #include <stdio.h>
+#include <ummu_api.h>
 #include "urma_provider.h"
 #include "urma_private.h"
 #include "udma_u_buf.h"
@@ -209,6 +210,7 @@ static void handle_recv_inl_cqe(struct udma_u_jfc_cqe *cqe, uint8_t opcode,
 static void udma_u_parse_opcode_for_res(struct udma_u_jfc_cqe *cqe, urma_cr_t *cr)
 {
 	uint8_t opcode = cqe->opcode;
+	int ret;
 
 	switch (opcode) {
 	case HW_CQE_OPC_SEND:
@@ -218,6 +220,16 @@ static void udma_u_parse_opcode_for_res(struct udma_u_jfc_cqe *cqe, urma_cr_t *c
 		cr->imm_data = (uint64_t)cqe->data_h << UDMA_IMM_DATA_SHIFT |
 			       cqe->data_l;
 		cr->opcode = URMA_CR_OPC_SEND_WITH_IMM;
+		break;
+	case HW_CQE_OPC_SEND_WITH_INV:
+		cr->invalid_token.token_id = cqe->data_l & (uint32_t)UDMA_U_CQE_INV_TOKEN_ID;
+		cr->invalid_token.token_value.token = cqe->data_h;
+		cr->opcode = URMA_CR_OPC_SEND_WITH_INV;
+		ret = ummu_free_tid(cr->invalid_token.token_id);
+		if (ret)
+			UDMA_LOG_ERR("invalidation of tid failed, ret = %d.\n", ret);
+
+		cr->invalid_token.token_id <<= UDMA_TID_SHIFT;
 		break;
 	case HW_CQE_OPC_WRITE_WITH_IMM:
 		cr->imm_data = (uint64_t)cqe->data_h << UDMA_IMM_DATA_SHIFT |
