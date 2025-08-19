@@ -103,6 +103,7 @@ static void udma_u_init_context(struct udma_u_context *udma_ctx,
 	udma_ctx->db.type = UDMA_MMAP_JFC_PAGE;
 	udma_ctx->cqe_size = resp->cqe_size;
 	udma_ctx->dwqe_enable = resp->dwqe_enable;
+	udma_ctx->reduce_enable = resp->reduce_enable;
 	udma_ctx->ue_id = resp->ue_id;
 	udma_ctx->chip_id = resp->chip_id;
 	udma_ctx->die_id = resp->die_id;

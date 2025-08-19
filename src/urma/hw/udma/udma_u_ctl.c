@@ -841,6 +841,33 @@ static void udma_set_post_info(struct udma_u_jetty_queue *sq,
 	info->db_addr = (void *)((char *)sq->db.addr + UDMA_DOORBELL_OFFSET);
 }
 
+static bool udma_valid_reduce_opcode(struct udma_u_context *udma_ctx,
+				     struct udma_u_jfs_wr_ex *cur_wr_ex)
+{
+	if (!udma_ctx->reduce_enable) {
+		UDMA_LOG_ERR("Not support reduce!\n");
+		return false;
+	}
+
+	if (cur_wr_ex->wr.opcode != URMA_OPC_WRITE &&
+	    cur_wr_ex->wr.opcode != URMA_OPC_WRITE_NOTIFY && cur_wr_ex->wr.opcode != URMA_OPC_READ) {
+		UDMA_LOG_ERR("Invalid opcode(%u) for reduce ops!\n", cur_wr_ex->wr.opcode);
+		return false;
+	}
+
+	if (cur_wr_ex->reduce_opcode < REDUCE_OPCODE_MIN || cur_wr_ex->reduce_opcode > REDUCE_OPCODE_MAX) {
+		UDMA_LOG_ERR("Invalid reduce opcode(%u) for reduce ops!\n", cur_wr_ex->reduce_opcode);
+		return false;
+	}
+
+	if (cur_wr_ex->reduce_data_type > REDUCE_DATA_TYPE_MAX) {
+		UDMA_LOG_ERR("Invalid reduce data_type(%u) for reduce ops!\n", cur_wr_ex->reduce_data_type);
+		return false;
+	}
+
+	return true;
+}
+
 static urma_status_t
 udma_u_post_sq_wr_ex(struct udma_u_context *udma_ctx, struct udma_u_jetty_queue *sq,
 		     struct udma_u_jfs_wr_ex **bad_wr, struct udma_u_wr_ex *wr_ex,
@@ -860,12 +887,25 @@ udma_u_post_sq_wr_ex(struct udma_u_context *udma_ctx, struct udma_u_jetty_queue 
 
 	for (it = wr; it != NULL; it = (urma_jfs_wr_t *)it->next) {
 		cur_wr_ex = to_udma_u_jfs_wr_ex(it);
+		if (cur_wr_ex->reduce_en && !udma_valid_reduce_opcode(udma_ctx, cur_wr_ex)) {
+			ret = URMA_EINVAL;
+			*bad_wr = cur_wr_ex;
+			goto out;
+		}
 
 		ret = udma_u_post_one_wr(udma_ctx, sq, it, &wqe_addr, &dwqe_enable);
 		if (ret) {
 			*bad_wr = cur_wr_ex;
 			goto out;
 		}
+
+		if (cur_wr_ex->reduce_en) {
+			wqe_addr->udf_flag = 1;
+			wqe_addr->udf_type = 0;
+			wqe_addr->reduce_data_type = cur_wr_ex->reduce_data_type;
+			wqe_addr->reduce_opcode = cur_wr_ex->reduce_opcode;
+		}
+
 		wr_cnt++;
 	}
 out:

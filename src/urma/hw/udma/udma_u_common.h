@@ -67,6 +67,7 @@ struct udma_u_context {
 	struct udma_u_doorbell	db;
 	uint8_t			cqe_size;
 	bool			dwqe_enable;
+	bool			reduce_enable;
 	uint32_t		ue_id;
 	uint32_t		chip_id;
 	uint32_t		die_id;
