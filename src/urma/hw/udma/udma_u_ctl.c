@@ -13,8 +13,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
+#include "urma_private.h"
 #include "udma_u_common.h"
+#include "udma_u_buf.h"
 #include "udma_u_db.h"
+#include "udma_u_jfs.h"
 #include "udma_u_jfr.h"
 #include "udma_u_ctl.h"
 
@@ -50,6 +53,51 @@ static int udma_u_init_queue_buf(struct udma_u_jetty_queue *q, uint32_t max_entr
 	}
 
 	q->qbuf = qbuff;
+	q->qbuf_curr = q->qbuf;
+	q->qbuf_end = q->qbuf + q->qbuf_size;
+
+	return 0;
+}
+
+static int udma_u_init_jfs_queue_buf(struct udma_u_jetty_queue *q,
+				     struct udma_u_jfs_cfg_ex *cfg_ex)
+{
+	uint32_t buf_size = cfg_ex->cstm_cfg.sq.buff_size;
+	bool cstm = !!cfg_ex->cstm_cfg.flag.bs.sq_cstm;
+	uint32_t max_entry_cnt = cfg_ex->sqebb_num;
+	uint32_t min_wqebb_cnt;
+
+	min_wqebb_cnt = (cstm && cfg_ex->jetty_type == UDMA_U_CCU_JETTY_TYPE) ?
+		UDMA_MIN_CCU_WQEBB_CNT : UDMA_MIN_JFS_WQEBB_CNT;
+	q->baseblk_shift = UDMA_JFS_WQEBB_SHIFT;
+	q->baseblk_cnt = cstm ? (buf_size >> q->baseblk_shift) : max_entry_cnt;
+	q->baseblk_mask = q->baseblk_cnt - 1U;
+	if (q->baseblk_cnt != roundup_pow_of_two(q->baseblk_cnt) ||
+		q->baseblk_cnt < min_wqebb_cnt ||
+		q->baseblk_cnt > UDMA_MAX_JFS_WQEBB_CNT) {
+		UDMA_LOG_ERR("invalid sqebb num %u!\n", q->baseblk_cnt);
+		return EINVAL;
+	}
+	q->qbuf_size = cstm ? buf_size : q->baseblk_cnt << q->baseblk_shift;
+
+	q->wrid = (uintptr_t *)malloc(q->baseblk_cnt * sizeof(uint64_t));
+	if (q->wrid == NULL) {
+		UDMA_LOG_ERR("failed to alloc jfs STARS buffer for wrid!\n");
+		return ENOMEM;
+	}
+
+	if (cstm) {
+		q->qbuf = cfg_ex->cstm_cfg.sq.buff;
+	} else {
+		q->qbuf = udma_u_alloc_buf(q->qbuf_size);
+		if (q->qbuf == NULL) {
+			UDMA_LOG_ERR("failed to alloc queue buffer.\n");
+			free(q->wrid);
+			q->wrid = NULL;
+			return ENOMEM;
+		}
+	}
+
 	q->qbuf_curr = q->qbuf;
 	q->qbuf_end = q->qbuf + q->qbuf_size;
 
@@ -234,6 +282,135 @@ err_spin_init:
 	return NULL;
 }
 
+static int udma_u_create_sq_ex(struct udma_u_jetty_queue *sq,
+			       struct udma_u_jfs_cfg_ex *cfg_ex)
+{
+	urma_jfs_cfg_t *base_cfg = &cfg_ex->base_cfg;
+	int ret;
+
+	sq->lock_free = !!base_cfg->flag.bs.lock_free;
+	if (!sq->lock_free &&
+	    pthread_spin_init(&sq->lock, PTHREAD_PROCESS_PRIVATE))
+		return EINVAL;
+
+	udma_u_init_sq_param(sq, base_cfg);
+
+	sq->max_sge_num = base_cfg->max_sge;
+	sq->sqe_bb_cnt = 1;
+	ret = udma_u_init_jfs_queue_buf(sq, cfg_ex);
+	if (ret) {
+		UDMA_LOG_ERR("init queue buf wrong, ret = %d.\n", ret);
+		goto err_init_sq_buf;
+	}
+
+	return 0;
+
+err_init_sq_buf:
+	if (!sq->lock_free)
+		(void)pthread_spin_destroy(&sq->lock);
+	return EFAULT;
+}
+
+static int udma_u_verify_jfs_cstm_cfg(struct udma_u_jfs_cstm_cfg *cstm_cfg)
+{
+	if (cstm_cfg->flag.bs.sq_cstm && udma_u_verify_que_cstm_cfg(&cstm_cfg->sq)) {
+		UDMA_LOG_ERR("invalid sq buff parameter.\n");
+		return EINVAL;
+	}
+
+	if (cstm_cfg->flag.bs.sq_cstm && ((cstm_cfg->sq.buff_size & (UDMA_JFS_WQEBB - 1)) != 0)) {
+		UDMA_LOG_ERR("queue len is not partition alignment.\n");
+		return EINVAL;
+	}
+
+	return 0;
+}
+
+static int udma_u_verify_jfs_param_ex(urma_context_t *ctx, struct udma_u_jfs_cfg_ex *cfg_ex)
+{
+	urma_device_attr_t *attr;
+	urma_jfs_cfg_t *jfs_cfg;
+
+	if (ctx == NULL) {
+		UDMA_LOG_ERR("urma ctx is null.\n");
+		return EINVAL;
+	}
+
+	if (cfg_ex == NULL) {
+		UDMA_LOG_ERR("cfg ex is null.\n");
+		return EINVAL;
+	}
+
+	attr = &ctx->dev->sysfs_dev->dev_attr;
+	jfs_cfg = &cfg_ex->base_cfg;
+
+	if ((jfs_cfg->max_inline_data != 0 && jfs_cfg->max_inline_data > attr->dev_cap.max_jfs_inline_len) ||
+	    (jfs_cfg->max_sge > attr->dev_cap.max_jfs_sge) || (jfs_cfg->max_rsge > attr->dev_cap.max_jfs_rsge) ||
+	    (cfg_ex->base_cfg.trans_mode == URMA_TM_RC)) {
+		UDMA_LOG_ERR("jfs cfg out of range, depth:%u, max_depth:%u, inline_data:%u, max_inline_len:%u, " \
+			     "sge:%hhu, max_sge:%u, rsge:%hhu, max_rsge:%u, trans_mode = %u.\n",
+			     jfs_cfg->depth, attr->dev_cap.max_jfs_depth,
+			     jfs_cfg->max_inline_data, attr->dev_cap.max_jfs_inline_len,
+			     jfs_cfg->max_sge, attr->dev_cap.max_jfs_sge,
+			     jfs_cfg->max_rsge, attr->dev_cap.max_jfs_rsge,
+			     cfg_ex->base_cfg.trans_mode);
+		return EINVAL;
+	}
+
+	return udma_u_verify_jfs_cstm_cfg(&cfg_ex->cstm_cfg);
+}
+
+static urma_jfs_t *udma_u_create_jfs_ex(urma_context_t *ctx,
+					struct udma_u_jfs_cfg_ex *cfg_ex)
+{
+	struct udma_u_context *udma_ctx = to_udma_u_ctx(ctx);
+	struct udma_u_jfs *jfs;
+
+	if (udma_u_verify_jfs_param_ex(ctx, cfg_ex))
+		return NULL;
+
+	jfs = (struct udma_u_jfs *)calloc(1, sizeof(struct udma_u_jfs));
+	if (jfs == NULL) {
+		UDMA_LOG_ERR("alloc jfs failed.\n");
+		return NULL;
+	}
+
+	if (udma_u_create_sq_ex(&jfs->sq, cfg_ex)) {
+		UDMA_LOG_ERR("failed to create sq.\n");
+		goto err_create_sq;
+	}
+
+	jfs->sq.cstm = cfg_ex->cstm_cfg.flag.bs.sq_cstm;
+	jfs->pi_type = cfg_ex->pi_type;
+	jfs->jfs_type = (uint32_t)cfg_ex->jetty_type;
+	jfs->sq.db.id = cfg_ex->id;
+	cfg_ex->base_cfg.depth = 1;
+	if (udma_u_exec_jfs_create_cmd(ctx, jfs, &cfg_ex->base_cfg)) {
+		UDMA_LOG_ERR("failed to exec jfs create cmd.\n");
+		goto err_exec_cmd;
+	}
+
+	jfs->sq.db.id = jfs->base.jfs_id.id;
+	jfs->sq.db.type = UDMA_MMAP_JETTY_DSQE;
+	if (udma_u_alloc_db(ctx, &jfs->sq.db)) {
+		UDMA_LOG_ERR("failed to alloc db.\n");
+		goto err_alloc_db;
+	}
+
+	jfs->sq.dwqe_addr = (void *)jfs->sq.db.addr;
+
+	return &jfs->base;
+
+err_alloc_db:
+	urma_cmd_delete_jfs(&jfs->base);
+err_exec_cmd:
+	udma_u_delete_sq(&jfs->sq);
+err_create_sq:
+	free(jfs);
+
+	return NULL;
+}
+
 static int udma_u_jfr_ops_ex(urma_context_t *ctx, urma_user_ctl_in_t *in,
 			     urma_user_ctl_out_t *out, enum udma_u_user_ctl_opcode op)
 {
@@ -269,9 +446,58 @@ static int udma_u_jfr_ops_ex(urma_context_t *ctx, urma_user_ctl_in_t *in,
 	return 0;
 }
 
+static void udma_fill_jfs_ex_out(urma_user_ctl_out_t *out, urma_jfs_t *jfs)
+{
+	struct udma_u_jfs *udma_jfs = to_udma_u_jfs(jfs);
+	struct udma_u_jfs_info jfs_info;
+
+	jfs_info.jfs = jfs;
+	jfs_info.dwqe_addr = udma_jfs->sq.dwqe_addr;
+	jfs_info.db_addr = jfs_info.dwqe_addr + UDMA_DOORBELL_OFFSET;
+
+	(void)memcpy((void *)out->addr, &jfs_info, sizeof(struct udma_u_jfs_info));
+}
+
+static int udma_u_jfs_ops_ex(urma_context_t *ctx, urma_user_ctl_in_t *in,
+			     urma_user_ctl_out_t *out, enum udma_u_user_ctl_opcode op)
+{
+	struct udma_u_jfs_cfg_ex cfg_ex;
+	urma_jfs_t *jfs = NULL;
+
+	if (op == UDMA_U_USER_CTL_CREATE_JFS_EX) {
+		if (!udma_u_user_ctl_check_param(in->addr, in->len, (uint32_t)sizeof(struct udma_u_jfs_cfg_ex), op) ||
+		    !udma_u_user_ctl_check_param(out->addr, out->len, (uint32_t)sizeof(struct udma_u_jfs_info), op))
+			return EINVAL;
+
+		(void)memcpy(&cfg_ex, (void *)in->addr, sizeof(struct udma_u_jfs_cfg_ex));
+		jfs = udma_u_create_jfs_ex(ctx, &cfg_ex);
+		if (jfs == NULL)
+			return EFAULT;
+
+		udma_fill_jfs_ex_out(out, jfs);
+		atomic_fetch_add(&ctx->ref.atomic_cnt, 1);
+	} else {
+		if (!udma_u_user_ctl_check_param(in->addr, in->len, (uint32_t)sizeof(urma_jfs_t *), op))
+			return EINVAL;
+
+		(void)memcpy(&jfs, (void *)in->addr, sizeof(urma_jfs_t *));
+		if (jfs == NULL)
+			return EINVAL;
+
+		if (udma_u_delete_jfs(jfs))
+			return EFAULT;
+
+		atomic_fetch_sub(&ctx->ref.atomic_cnt, 1);
+	}
+
+	return 0;
+}
+
 static udma_u_user_ctl_ops g_udma_u_user_ctl_ops[] = {
 	[UDMA_U_USER_CTL_CREATE_JFR_EX] = udma_u_jfr_ops_ex,
 	[UDMA_U_USER_CTL_DELETE_JFR_EX] = udma_u_jfr_ops_ex,
+	[UDMA_U_USER_CTL_CREATE_JFS_EX] = udma_u_jfs_ops_ex,
+	[UDMA_U_USER_CTL_DELETE_JFS_EX] = udma_u_jfs_ops_ex,
 };
 
 bool udma_u_user_ctl_check_param(uint64_t addr, uint32_t in_len, uint32_t len,

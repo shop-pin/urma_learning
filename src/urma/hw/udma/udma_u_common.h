@@ -27,9 +27,13 @@
 
 #define UDMA_JFS_WQEBB 64
 #define UDMA_JFR_WQEBB 16U
+#define UDMA_MIN_JFS_WQEBB_CNT 64
+#define UDMA_MIN_CCU_WQEBB_CNT 16
+#define UDMA_MAX_JFS_WQEBB_CNT 32768
 #define UDMA_HW_PAGE_SIZE 4096U
 #define UDMA_BITS_PER_LONG 64
 #define UDMA_BITS_PER_LONG_SHIFT 6
+#define UDMA_JFS_WQEBB_SHIFT 6
 #define UDMA_SGE_SIZE 16
 #define UDMA_JFC_DB_OFFSET 0
 #define min(x, y) ((x) < (y) ? (x) : (y))

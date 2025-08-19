@@ -46,9 +46,48 @@ struct udma_u_jfr_cfg_ex {
 	struct udma_u_jfr_cstm_cfg cstm_cfg;
 };
 
+union udma_jfs_flag {
+	struct {
+		uint32_t sq_cstm : 1;
+		uint32_t db_cstm : 1;
+		uint32_t db_ctl_cstm : 1;
+		uint32_t reserved : 29;
+	} bs;
+	uint32_t value;
+};
+
+struct udma_u_jfs_cstm_cfg {
+	union udma_jfs_flag flag;
+	struct udma_u_que_cfg_ex sq;
+	uint32_t tgid;
+};
+
+enum udma_u_jetty_type {
+	UDMA_U_CACHE_LOCK_DWQE_JETTY_TYPE,
+	UDMA_U_CCU_JETTY_TYPE,
+	UDMA_U_NORMAL_JETTY_TYPE,
+};
+
+struct udma_u_jfs_cfg_ex {
+	uint32_t id;
+	urma_jfs_cfg_t base_cfg;
+	struct udma_u_jfs_cstm_cfg cstm_cfg;
+	enum udma_u_jetty_type jetty_type;
+	bool pi_type;
+	uint32_t sqebb_num;
+};
+
+struct udma_u_jfs_info {
+	urma_jfs_t *jfs;
+	void *dwqe_addr;
+	void *db_addr;
+};
+
 enum udma_u_user_ctl_opcode {
 	UDMA_U_USER_CTL_CREATE_JFR_EX,
 	UDMA_U_USER_CTL_DELETE_JFR_EX,
+	UDMA_U_USER_CTL_CREATE_JFS_EX,
+	UDMA_U_USER_CTL_DELETE_JFS_EX,
 	UDMA_U_USER_CTL_MAX,
 };
 

@@ -103,6 +103,8 @@ int udma_u_exec_jfs_create_cmd(urma_context_t *ctx, struct udma_u_jfs *jfs,
 	cmd.buf_len = jfs->sq.qbuf_size;
 	cmd.jetty_addr = (uintptr_t)&jfs->sq;
 	cmd.sqe_bb_cnt = jfs->sq.sqe_bb_cnt;
+	cmd.pi_type = jfs->pi_type;
+	cmd.non_pin = jfs->sq.cstm;
 	cmd.jetty_type = jfs->jfs_type;
 	cmd.jfs_id = jfs->sq.db.id;
 	udma_u_set_udata(&udata, &cmd, (uint32_t)sizeof(cmd), NULL, 0);
