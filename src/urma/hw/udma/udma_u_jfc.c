@@ -423,6 +423,26 @@ static void dump_cqe_aux_info(urma_context_t *ctx, urma_cr_t *cr)
 		UDMA_LOG_ERR("query cqe aux info failed, ret = %d.\n", ret);
 }
 
+static void dump_cqe_aux_info(urma_context_t *ctx, urma_cr_t *cr)
+{
+	struct udma_u_cqe_info_in info_in;
+	urma_user_ctl_out_t out = {};
+	urma_user_ctl_in_t in = {};
+	int ret;
+
+	info_in.status = cr->status;
+	info_in.s_r = cr->flag.bs.s_r;
+	in.addr = (uint64_t)&info_in;
+	in.len = sizeof(struct udma_u_cqe_info_in);
+
+	ret = udma_u_query_cqe_aux_info(ctx, &in, &out, 0);
+	if (ret)
+		UDMA_LOG_ERR("query cqe aux info failed, ret = %d.\n", ret);
+	if (cr->status != URMA_CR_SUCCESS && udma_ctx->dump_aux_info)
+		dump_cqe_aux_info(&udma_ctx->urma_ctx, cr);
+
+}
+
 static enum jfc_poll_state udma_u_poll_one(struct udma_u_context *udma_ctx,
 					   struct udma_u_jfc *udma_u_jfc,
 					   urma_cr_t *cr)

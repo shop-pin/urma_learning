@@ -1099,6 +1099,28 @@ int udma_u_query_cqe_aux_info(urma_context_t *ctx, urma_user_ctl_in_t *in,
 	return ret;
 }
 
+static int udma_u_query_ae_aux_info(urma_context_t *ctx, urma_user_ctl_in_t *in,
+				       urma_user_ctl_out_t *out,
+				       enum udma_u_user_ctl_opcode op)
+{
+#define UDMA_USER_CTL_QUERY_AE_AUX_INFO 11
+	urma_udrv_t udrv_data = {};
+	int ret;
+
+	if (!udma_u_user_ctl_check_param(in->addr, in->len, (uint32_t)sizeof(struct udma_u_ae_info_in), op))
+		return EINVAL;
+
+	in->opcode = UDMA_USER_CTL_QUERY_AE_AUX_INFO;
+
+	ret = urma_cmd_user_ctl(ctx, in, out, &udrv_data);
+	if (ret)
+		UDMA_LOG_ERR("failed to query cqe aux info, ret: %d.\n", ret);
+
+	in->opcode = UDMA_U_USER_CTL_QUERY_AE_AUX_INFO;
+
+	return ret;
+}
+
 static udma_u_user_ctl_ops g_udma_u_user_ctl_ops[] = {
 	[UDMA_U_USER_CTL_CREATE_JFR_EX] = udma_u_jfr_ops_ex,
 	[UDMA_U_USER_CTL_DELETE_JFR_EX] = udma_u_jfr_ops_ex,
@@ -1113,6 +1135,7 @@ static udma_u_user_ctl_ops g_udma_u_user_ctl_ops[] = {
 	[UDMA_U_USER_CTL_QUERY_UE_INFO] = udma_u_query_ue_info,
 	[UDMA_U_USER_CTL_QUERY_TP_SPORT] = udma_u_ctrlq_query_tp_sport,
 	[UDMA_U_USER_CTL_QUERY_CQE_AUX_INFO] = udma_u_query_cqe_aux_info,
+	[UDMA_U_USER_CTL_QUERY_AE_AUX_INFO] = udma_u_query_ae_aux_info,
 };
 
 bool udma_u_user_ctl_check_param(uint64_t addr, uint32_t in_len, uint32_t len,

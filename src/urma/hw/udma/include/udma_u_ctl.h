@@ -164,6 +164,7 @@ enum udma_u_user_ctl_opcode {
 	UDMA_U_USER_CTL_QUERY_UE_INFO,
 	UDMA_U_USER_CTL_QUERY_TP_SPORT,
 	UDMA_U_USER_CTL_QUERY_CQE_AUX_INFO,
+	UDMA_U_USER_CTL_QUERY_AE_AUX_INFO,
 	UDMA_U_USER_CTL_MAX,
 };
 
@@ -226,6 +227,29 @@ enum udma_u_cqe_aux_info_type {
 
 struct udma_u_cqe_aux_info_out {
 	enum udma_u_cqe_aux_info_type *aux_info_type;
+	uint32_t *aux_info_value;
+	uint32_t aux_info_num;
+};
+
+struct udma_u_ae_info_in {
+	uint32_t event_type;
+};
+
+enum udma_u_ae_aux_info_type {
+	TP_RRP_FLUSH_TIMER_PKT_CNT,
+	TPP_DFX5,
+	TWP_AE_DFX_FOR_AE,
+	TP_RRP_ERR_FLG_0_FOR_AE,
+	TP_RRP_ERR_FLG_1,
+	TP_RWP_INNER_ALM_FOR_AE,
+	TP_RCP_INNER_ALM_FOR_AE,
+	LQC_TA_TQEP_WQE_ERR,
+	LQC_TA_CQM_CQE_INNER_ALARM,
+	MAX_AE_AUX_INFO_TYPE_NUM
+};
+
+struct udma_u_ae_aux_info_out {
+	enum udma_u_ae_aux_info_type *aux_info_type;
 	uint32_t *aux_info_value;
 	uint32_t aux_info_num;
 };
