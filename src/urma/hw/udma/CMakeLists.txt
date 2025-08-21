@@ -2,10 +2,9 @@ aux_source_directory(${CMAKE_CURRENT_LIST_DIR} PROVIDER_UB_DIR_SRCS)
 
 add_library(BETA_UDMA_SO SHARED ${PROVIDER_UB_DIR_SRCS})
 
-target_include_directories(BETA_UDMA_SO PRIVATE ${CMAKE_SOURCE_DIR}/urma/lib/urma/include)
 target_include_directories(BETA_UDMA_SO PRIVATE ${CMAKE_SOURCE_DIR}/urma/lib/urma/core)
-target_include_directories(BETA_UDMA_SO PRIVATE ${CMAKE_SOURCE_DIR}/urma/include)
-target_include_directories(BETA_UDMA_SO PRIVATE ${CMAKE_SOURCE_DIR}/urma/include/common)
+target_include_directories(BETA_UDMA_SO PRIVATE ${CMAKE_SOURCE_DIR}/urma/lib/urma/core/include)
+target_include_directories(BETA_UDMA_SO PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/kernel_headers)
 
 target_link_libraries(BETA_UDMA_SO PRIVATE urma)
 target_link_libraries(BETA_UDMA_SO PRIVATE urma_common)
