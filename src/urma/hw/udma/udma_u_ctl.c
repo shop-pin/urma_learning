@@ -90,14 +90,23 @@ static int udma_u_init_jfs_queue_buf(struct udma_u_jetty_queue *q,
 
 	if (cstm) {
 		q->qbuf = cfg_ex->cstm_cfg.sq.buff;
+	} else if (q->ctx->hugepage_enable) {
+		q->hugepage = udma_u_alloc_hugepage(q->ctx, q->qbuf_size);
+		if (q->hugepage) {
+			q->qbuf = q->hugepage->va_start;
+		} else {
+			UDMA_LOG_WARN("failed to alloc hugepage buf, switch to alloc standard buf.");
+			q->qbuf = udma_u_alloc_buf(q->qbuf_size);
+		}
 	} else {
 		q->qbuf = udma_u_alloc_buf(q->qbuf_size);
-		if (q->qbuf == NULL) {
-			UDMA_LOG_ERR("failed to alloc queue buffer.\n");
-			free(q->wrid);
-			q->wrid = NULL;
-			return ENOMEM;
-		}
+	}
+
+	if (q->qbuf == NULL) {
+		UDMA_LOG_ERR("failed to alloc queue buffer.\n");
+		free(q->wrid);
+		q->wrid = NULL;
+		return ENOMEM;
 	}
 
 	q->qbuf_curr = q->qbuf;
@@ -377,6 +386,7 @@ static urma_jfs_t *udma_u_create_jfs_ex(urma_context_t *ctx,
 		return NULL;
 	}
 
+	jfs->sq.ctx = udma_ctx;
 	if (udma_u_create_sq_ex(&jfs->sq, cfg_ex)) {
 		UDMA_LOG_ERR("failed to create sq.\n");
 		goto err_create_sq;
@@ -537,6 +547,7 @@ static urma_jetty_t *udma_u_create_jetty_ex(urma_context_t *ctx, struct udma_u_j
 		goto err_init_jetty_trans_mode;
 
 	udma_u_init_jfs_cfg_ex(cfg_ex, &jfs_cfg);
+	jetty->sq.ctx = udma_ctx;
 	ret = udma_u_create_sq_ex(&jetty->sq, &jfs_cfg);
 	if (ret != 0) {
 		UDMA_LOG_ERR("jetty create sq failed, ret = %d.\n", ret);

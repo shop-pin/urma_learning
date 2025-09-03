@@ -30,6 +30,7 @@
 #define UDMA_MIN_JFS_WQEBB_CNT 64
 #define UDMA_MIN_CCU_WQEBB_CNT 16
 #define UDMA_MAX_JFS_WQEBB_CNT 32768
+#define UDMA_HUGEPAGE_SIZE 2097152
 #define UDMA_HW_PAGE_SIZE 4096U
 #define UDMA_BITS_PER_LONG 64
 #define UDMA_BITS_PER_LONG_SHIFT 6
@@ -58,6 +59,22 @@ struct udma_u_db_page {
 	uint32_t bitmap_cnt;
 };
 
+struct udma_u_hugepage_priv {
+	void *va_base;
+	uint32_t va_len;
+	uint32_t left_va_offset;
+	uint32_t left_va_len;
+	uint32_t refcnt;
+	struct udma_u_hugepage_priv *pre;
+	struct udma_u_hugepage_priv *next;
+};
+
+struct udma_u_hugepage {
+	void *va_start;
+	uint32_t va_len;
+	struct udma_u_hugepage_priv *priv;
+};
+
 struct udma_u_context {
 	urma_context_t		urma_ctx;
 	void			*db_addr;
@@ -74,9 +91,13 @@ struct udma_u_context {
 	bool			dump_aux_info;
 	uint32_t		jfr_sge;
 	struct node_tbl		src_idx_tbl[UDMA_U_TBL_NUM];
+	bool			hugepage_enable;
+	pthread_mutex_t		hugepage_lock;
+	struct udma_u_hugepage_priv *hugepage_list;
 };
 
 struct udma_u_jetty_queue {
+	struct udma_u_context *ctx;
 	/* Command queue */
 	void *qbuf; /* Base virtual address of command buffer */
 	void *qbuf_end;
@@ -103,6 +124,7 @@ struct udma_u_jetty_queue {
 	bool lock_free;
 	bool cstm; /* sq ctrl flag */
 	struct udma_u_hmap_node hmap_node;
+	struct udma_u_hugepage *hugepage;
 };
 
 struct udma_wqe_sge {

@@ -19,6 +19,7 @@
 #include "udma_u_ctl.h"
 #include "udma_u_db.h"
 #include "udma_u_ctrlq_tp.h"
+#include "udma_u_buf.h"
 #include "udma_u_ops.h"
 
 /* udma_u_xx_ex interface thanks to rdma-core-master/providers/hns/hns_roce_u.c code. */
@@ -109,6 +110,7 @@ static void udma_u_init_context(struct udma_u_context *udma_ctx,
 	udma_ctx->die_id = resp->die_id;
 	udma_ctx->dump_aux_info = resp->dump_aux_info;
 	udma_ctx->jfr_sge = resp->jfr_sge;
+	udma_ctx->hugepage_enable = resp->hugepage_enable;
 }
 
 static urma_context_t *udma_u_create_context(urma_device_t *dev, uint32_t eid_index,
@@ -132,8 +134,14 @@ static urma_context_t *udma_u_create_context(urma_device_t *dev, uint32_t eid_in
 
 	if (pthread_mutex_init(&udma_ctx->db_list_mutex, NULL)) {
 		UDMA_LOG_ERR("Failed to init db_list_mutex.\n");
-		goto err_init_mutex;
+		goto err_db_list_mutex;
 	}
+
+	if (pthread_mutex_init(&udma_ctx->hugepage_lock, NULL)) {
+		UDMA_LOG_ERR("Failed to init db_list_mutex.\n");
+		goto err_hugepage_lock;
+	}
+	udma_ctx->hugepage_list = NULL;
 
 	udma_u_set_udata(&udrv_data, NULL, 0, &resp, sizeof(resp));
 
@@ -159,8 +167,10 @@ err_init_node:
 err_alloc_db:
 	(void)urma_cmd_delete_context(&udma_ctx->urma_ctx);
 err_create_ctx:
+	(void)pthread_mutex_destroy(&udma_ctx->hugepage_lock);
+err_hugepage_lock:
 	(void)pthread_mutex_destroy(&udma_ctx->db_list_mutex);
-err_init_mutex:
+err_db_list_mutex:
 	free(udma_ctx);
 
 	return NULL;
@@ -173,6 +183,7 @@ static urma_status_t udma_u_delete_context(urma_context_t *ctx)
 
 	udma_u_uninit_node_tbl(udma_ctx->src_idx_tbl);
 	udma_u_free_db(ctx, &udma_ctx->db);
+	udma_u_destroy_hugepage(udma_ctx);
 
 	if (urma_cmd_delete_context(&udma_ctx->urma_ctx)) {
 		UDMA_LOG_ERR("udma destroy ctx failed.\n");

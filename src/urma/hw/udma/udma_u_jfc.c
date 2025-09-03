@@ -46,17 +46,51 @@ static int udma_u_jfc_cmd(urma_context_t *ctx, struct udma_u_jfc *jfc,
 	cmd.buf_addr = (uintptr_t)jfc->cq.qbuf;
 	cmd.db_addr = (uintptr_t)jfc->sw_db;
 	cmd.buf_len = jfc->cq.qbuf_size;
+	cmd.is_hugepage = jfc->cq.hugepage != NULL;
 
 	udma_u_set_udata(&udata, &cmd, sizeof(cmd), NULL, 0);
 
 	return urma_cmd_create_jfc(ctx, &jfc->base, cfg, &udata);
 }
 
+static int udma_u_create_cq(struct udma_u_jetty_queue *cq, urma_jfc_cfg_t *cfg)
+{
+	uint32_t depth;
+
+	cq->lock_free = cfg->flag.bs.lock_free;
+	if (!cq->lock_free &&
+	    pthread_spin_init(&cq->lock, PTHREAD_PROCESS_PRIVATE)) {
+		UDMA_LOG_ERR("failed to init lock.\n");
+		return EFAULT;
+	}
+
+	depth = cfg->depth < UDMA_U_MIN_JFC_DEPTH ? UDMA_U_MIN_JFC_DEPTH : cfg->depth;
+	if (!udma_u_alloc_queue_buf(cq, depth, cq->ctx->cqe_size, UDMA_HW_PAGE_SIZE, false)) {
+		UDMA_LOG_ERR("failed to alloc jfc wqe buf.\n");
+		goto err_alloc_buf;
+	}
+
+	return 0;
+
+err_alloc_buf:
+	if (!cq->lock_free)
+		(void)pthread_spin_destroy(&cq->lock);
+
+	return EFAULT;
+}
+
+static void udma_u_delete_cq(struct udma_u_jetty_queue *cq)
+{
+	udma_u_free_queue_buf(cq);
+
+	if (!cq->lock_free)
+		(void)pthread_spin_destroy(&cq->lock);
+}
+
 urma_jfc_t *udma_u_create_jfc(urma_context_t *ctx, urma_jfc_cfg_t *cfg)
 {
 	struct udma_u_context *udma_ctx = to_udma_u_ctx(ctx);
 	struct udma_u_jfc *jfc;
-	uint32_t depth;
 	int ret;
 
 	ret = udma_u_check_jfc_cfg(ctx, cfg);
@@ -69,19 +103,10 @@ urma_jfc_t *udma_u_create_jfc(urma_context_t *ctx, urma_jfc_cfg_t *cfg)
 		return NULL;
 	}
 
-	jfc->cq.lock_free = cfg->flag.bs.lock_free;
-
-	if (!jfc->cq.lock_free &&
-	    pthread_spin_init(&jfc->cq.lock, PTHREAD_PROCESS_PRIVATE)) {
-		UDMA_LOG_ERR("failed to init user udma jfc spinlock.\n");
-		goto err_init_lock;
-	}
-
-	depth = cfg->depth < UDMA_U_MIN_JFC_DEPTH ? UDMA_U_MIN_JFC_DEPTH : cfg->depth;
-	if (!udma_u_alloc_queue_buf(&jfc->cq, depth, udma_ctx->cqe_size,
-				    UDMA_HW_PAGE_SIZE, false)) {
-		UDMA_LOG_ERR("failed to alloc user jfc wqe buf.\n");
-		goto err_alloc_buf;
+	jfc->cq.ctx = udma_ctx;
+	if (udma_u_create_cq(&jfc->cq, cfg)) {
+		UDMA_LOG_ERR("failed to create cq.\n");
+		goto err_create_cq;
 	}
 
 	jfc->sw_db = (uint32_t *)udma_u_alloc_sw_db(udma_ctx, UDMA_JFC_TYPE_DB);
@@ -105,11 +130,8 @@ urma_jfc_t *udma_u_create_jfc(urma_context_t *ctx, urma_jfc_cfg_t *cfg)
 err_create_jfc:
 	udma_u_free_sw_db(udma_ctx, jfc->sw_db, UDMA_JFC_TYPE_DB);
 err_alloc_sw_db:
-	udma_u_free_queue_buf(&jfc->cq);
-err_alloc_buf:
-	if (!jfc->cq.lock_free)
-		(void)pthread_spin_destroy(&jfc->cq.lock);
-err_init_lock:
+	udma_u_delete_cq(&jfc->cq);
+err_create_cq:
 	free(jfc);
 	return NULL;
 }
@@ -421,26 +443,6 @@ static void dump_cqe_aux_info(urma_context_t *ctx, urma_cr_t *cr)
 	ret = udma_u_query_cqe_aux_info(ctx, &in, &out, 0);
 	if (ret)
 		UDMA_LOG_ERR("query cqe aux info failed, ret = %d.\n", ret);
-}
-
-static void dump_cqe_aux_info(urma_context_t *ctx, urma_cr_t *cr)
-{
-	struct udma_u_cqe_info_in info_in;
-	urma_user_ctl_out_t out = {};
-	urma_user_ctl_in_t in = {};
-	int ret;
-
-	info_in.status = cr->status;
-	info_in.s_r = cr->flag.bs.s_r;
-	in.addr = (uint64_t)&info_in;
-	in.len = sizeof(struct udma_u_cqe_info_in);
-
-	ret = udma_u_query_cqe_aux_info(ctx, &in, &out, 0);
-	if (ret)
-		UDMA_LOG_ERR("query cqe aux info failed, ret = %d.\n", ret);
-	if (cr->status != URMA_CR_SUCCESS && udma_ctx->dump_aux_info)
-		dump_cqe_aux_info(&udma_ctx->urma_ctx, cr);
-
 }
 
 static enum jfc_poll_state udma_u_poll_one(struct udma_u_context *udma_ctx,

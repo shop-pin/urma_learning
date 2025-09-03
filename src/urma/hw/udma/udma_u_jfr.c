@@ -84,6 +84,7 @@ int exec_jfr_create_cmd(urma_context_t *ctx, struct udma_u_jfr *jfr,
 	cmd.idx_len = jfr->idx_que.buf.length;
 	cmd.jetty_addr = (uintptr_t)&jfr->rq;
 	cmd.non_pin = jfr->rq.cstm;
+	cmd.is_hugepage = jfr->rq.hugepage != NULL;
 
 	udma_u_set_udata(&udata, &cmd, sizeof(cmd), &resp, sizeof(resp));
 	ret = urma_cmd_create_jfr(ctx, &jfr->base, cfg, &udata);
@@ -153,6 +154,7 @@ urma_jfr_t *udma_u_create_jfr(urma_context_t *ctx, urma_jfr_cfg_t *cfg)
 		goto err_alloc_idx;
 	}
 
+	udma_jfr->rq.ctx = udma_ctx;
 	if (udma_u_create_rq(udma_ctx, udma_jfr)) {
 		UDMA_LOG_ERR("failed to create jfr rqe buf.\n");
 		goto err_create_rq;

@@ -39,6 +39,7 @@ int exec_jetty_create_cmd(urma_context_t *ctx, struct udma_u_jetty *jetty,
 	cmd.pi_type = jetty->pi_type;
 	cmd.jetty_type = jetty->jetty_type;
 	cmd.non_pin = jetty->sq.cstm;
+	cmd.is_hugepage = jetty->sq.hugepage != NULL;
 
 	udma_u_set_udata(&udata, &cmd, (uint32_t)sizeof(cmd), NULL, 0);
 	ret = urma_cmd_create_jetty(ctx, &jetty->base, cfg, &udata);
@@ -140,6 +141,7 @@ urma_jetty_t *udma_u_create_jetty(urma_context_t *ctx, urma_jetty_cfg_t *cfg)
 		goto err_add_to_grp;
 	}
 
+	jetty->sq.ctx = udma_ctx;
 	ret = udma_u_create_sq(&jetty->sq, &cfg->jfs_cfg);
 	if (ret) {
 		UDMA_LOG_ERR("Jetty create sq failed.\n");

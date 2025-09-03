@@ -105,6 +105,7 @@ int udma_u_exec_jfs_create_cmd(urma_context_t *ctx, struct udma_u_jfs *jfs,
 	cmd.sqe_bb_cnt = jfs->sq.sqe_bb_cnt;
 	cmd.pi_type = jfs->pi_type;
 	cmd.non_pin = jfs->sq.cstm;
+	cmd.is_hugepage = jfs->sq.hugepage != NULL;
 	cmd.jetty_type = jfs->jfs_type;
 	cmd.jfs_id = jfs->sq.db.id;
 	udma_u_set_udata(&udata, &cmd, (uint32_t)sizeof(cmd), NULL, 0);
@@ -158,6 +159,7 @@ void udma_u_delete_sq(struct udma_u_jetty_queue *sq)
 
 urma_jfs_t *udma_u_create_jfs(urma_context_t *ctx, urma_jfs_cfg_t *cfg)
 {
+	struct udma_u_context *udma_ctx = to_udma_u_ctx(ctx);
 	struct udma_u_jfs *jfs;
 
 	if (cfg->trans_mode == URMA_TM_RC) {
@@ -171,6 +173,7 @@ urma_jfs_t *udma_u_create_jfs(urma_context_t *ctx, urma_jfs_cfg_t *cfg)
 		return NULL;
 	}
 
+	jfs->sq.ctx = udma_ctx;
 	if (udma_u_create_sq(&jfs->sq, cfg)) {
 		UDMA_LOG_ERR("failed to create sq.\n");
 		goto err_create_sq;

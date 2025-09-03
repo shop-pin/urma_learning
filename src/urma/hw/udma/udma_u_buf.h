@@ -23,4 +23,8 @@ static inline void udma_u_free_buf(void *buf, uint32_t buf_size)
 	(void)munmap(buf, buf_size);
 }
 
+struct udma_u_hugepage *udma_u_alloc_hugepage(struct udma_u_context *ctx, uint32_t len);
+void udma_u_free_hugepage(struct udma_u_context *ctx, struct udma_u_hugepage *hugepage);
+void udma_u_destroy_hugepage(struct udma_u_context *ctx);
+
 #endif /* __UDMA_U_BUF_H__ */
