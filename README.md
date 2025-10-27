@@ -9,7 +9,7 @@ The UB Communication Foundation Library provides remote memory operation methods
 It offers two types of interfaces: one is the northbound application programming interface, which provides communication APIs for applications, and the other is the southbound driver programming interface, which offers APIs for driver developers to access the UMDK.
 
 2. URPC
-    Unified Remote Procedure Call, supporting Lingqu-native high-performance RPC communication between hosts and devices, as well as RPC acceleration (zero-modification acceleration for BRPC and similar RPC applications).
+    Unified Remote Procedure Call, supporting Lingqu-native high-performance RPC communication between hosts and devices, as well as RPC acceleration.
 
 3. ULOCK
     State unification synchronization, featuring native Lingqu high-performance state synchronization with distributed lock support, accelerates global resource allocation for distributed applications such as databases.
