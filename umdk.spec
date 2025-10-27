@@ -402,8 +402,8 @@ fi
 
 %files urpc-umq-example
 %defattr(-,root,root)
-    %{_bindir}/urpc_umq_example
-    %dir %{_docdir}/umdk-examples/urpc_example/urpc_umq_example
+    %{_bindir}/umq_example
+    %dir %{_docdir}/umdk-examples/urpc_example/umq_example
 
 %files urpc-framework-tools
 %defattr(-,root,root)

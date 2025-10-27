@@ -10,10 +10,10 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../include/umq)
 
 aux_source_directory(${CMAKE_CURRENT_LIST_DIR} UMQ_EXAMPLE_DIR_SRCS)
 
-add_executable(urpc_umq_example
+add_executable(umq_example
     ${UMQ_EXAMPLE_DIR_SRCS})
 
-set_property(TARGET urpc_umq_example PROPERTY C_STANDARD 11)
-target_link_libraries(urpc_umq_example umq umq_buf)
-install(TARGETS urpc_umq_example DESTINATION /usr/bin)
-install(DIRECTORY DESTINATION /usr/share/doc/umdk-examples/urpc_example/urpc_umq_example)
+set_property(TARGET umq_example PROPERTY C_STANDARD 11)
+target_link_libraries(umq_example umq umq_buf)
+install(TARGETS umq_example DESTINATION /usr/bin)
+install(DIRECTORY DESTINATION /usr/share/doc/umdk-examples/urpc_example/umq_example)

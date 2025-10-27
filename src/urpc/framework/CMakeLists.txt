@@ -1,10 +1,9 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) Huawei Technologies Co., Ltd. 2020-2025. All rights reserved.
 
-include_directories(${CMAKE_CURRENT_LIST_DIR}/../include/framework)
-include_directories(${CMAKE_CURRENT_LIST_DIR}/../util)
-
 include_directories(
+    ${CMAKE_CURRENT_LIST_DIR}/../include/framework
+    ${CMAKE_CURRENT_LIST_DIR}/../util
     ${CMAKE_CURRENT_LIST_DIR}/core
     ${CMAKE_CURRENT_LIST_DIR}/core/channel
     ${CMAKE_CURRENT_LIST_DIR}/core/queue
@@ -13,13 +12,11 @@ include_directories(
     ${CMAKE_CURRENT_LIST_DIR}/lib/control
     ${CMAKE_CURRENT_LIST_DIR}/lib/control/ip
     ${CMAKE_CURRENT_LIST_DIR}/lib/control/dfx
-    ${CMAKE_CURRENT_LIST_DIR}/lib/control/event
     ${CMAKE_CURRENT_LIST_DIR}/lib/control/unix_server
     ${CMAKE_CURRENT_LIST_DIR}/lib/control/allocator
     ${CMAKE_CURRENT_LIST_DIR}/lib/control/crypto
     ${CMAKE_CURRENT_LIST_DIR}/lib/datapath
     ${CMAKE_CURRENT_LIST_DIR}/lib/manager
-    ${CMAKE_CURRENT_LIST_DIR}/lib/manager/keepalive
     ${CMAKE_CURRENT_LIST_DIR}/protocol
     ${CMAKE_CURRENT_LIST_DIR}/util
 )

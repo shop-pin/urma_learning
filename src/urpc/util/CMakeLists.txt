@@ -13,4 +13,5 @@ target_include_directories(common_util
     PUBLIC
         ${CMAKE_CURRENT_LIST_DIR}
         ${CMAKE_SOURCE_DIR}/urma/lib/urma/core/include
+        ${CMAKE_SOURCE_DIR}/urma/common/include
 )
