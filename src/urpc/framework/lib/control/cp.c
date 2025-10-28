@@ -177,7 +177,6 @@ static int check_set_cfg(urpc_config_t *cfg)
         return -URPC_ERR_EINVAL;
     }
 
-    // IP mode must use timeout
     for (uint8_t i = 0; i < cfg->trans_info_num; i++) {
         /* uRPC supports multi-eid only when DEV_ASSIGN_MODE_DEV assign mode is used to set all trans_info */
         if ((cfg->feature & URPC_FEATURE_MULTI_EID) != 0 && cfg->trans_info[i].assign_mode != DEV_ASSIGN_MODE_DEV) {
@@ -2005,6 +2004,6 @@ int urpc_mem_unimport(uint32_t server_chid, uint32_t token_id, uint32_t token_va
             ret = URPC_FAIL;
         };
     }
-    
+
     return ret;
 }

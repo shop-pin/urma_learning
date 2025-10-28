@@ -428,7 +428,7 @@ jfr_ctx_t *send_recv_get_jfr_ctx(jetty_provider_t *provider,
     if ((qcfg->create_flag & QCREATE_FLAG_QH_SHARE_RQ) == 0) {
         urma_jfr_cfg_t jfr_cfg = {
             .flag.bs.token_policy = token_policy_get(),
-            .flag.bs.order_type = URMA_OT,
+            .flag.bs.order_type = URMA_DEF_ORDER,
             .trans_mode = URMA_TM_RC,
             .depth = local_q_cfg->rx_depth,
             .max_sge = local_q_cfg->max_rx_sge, .min_rnr_timer = local_q_cfg->min_rnr_timer, .jfc = cfg->jfr_jfc,
@@ -525,7 +525,7 @@ urma_jetty_t *send_recv_create_jetty(
 {
     urma_jetty_cfg_t jetty_cfg = {
         .jfs_cfg = {
-            .flag.bs.order_type = URMA_OT,
+            .flag.bs.order_type = URMA_DEF_ORDER,
             .trans_mode = URMA_TM_RC,
             .depth = local_q_cfg->tx_depth,
             .priority = local_q_cfg->priority,
@@ -538,26 +538,8 @@ urma_jetty_t *send_recv_create_jetty(
         .id = 0,
     };
 
-    /* Only used by IP, IP not support shared jfr */
-    urma_jfr_cfg_t jfr_cfg = {
-        .flag.bs.token_policy = token_policy_get(),
-        .flag.bs.order_type = URMA_OT,
-        .trans_mode = URMA_TM_RC,
-        .depth = local_q_cfg->rx_depth,
-        .max_sge = local_q_cfg->max_rx_sge,
-        .min_rnr_timer = local_q_cfg->min_rnr_timer,
-        .jfc = cfg->jfr_jfc,
-        .token_value =  {
-            .token = crypto_gen_rand_token(),
-        }
-    };
-    if (jfr == NULL) {
-        jetty_cfg.jfr_cfg = &jfr_cfg;
-    } else {
-        jetty_cfg.flag.bs.share_jfr = true;
-        jetty_cfg.shared.jfr = jfr;
-    }
-
+    jetty_cfg.flag.bs.share_jfr = true;
+    jetty_cfg.shared.jfr = jfr;
     return urma_create_jetty(provider->urma_ctx, &jetty_cfg);
 }
 
@@ -1389,7 +1371,7 @@ void mem_hmap_rdlcok(void)
 {
     (void)pthread_rwlock_rdlock(&g_urpc_ip_mem_hmap.lock);
 }
- 
+
 void mem_hmap_unlcok(void)
 {
     (void)pthread_rwlock_unlock(&g_urpc_ip_mem_hmap.lock);

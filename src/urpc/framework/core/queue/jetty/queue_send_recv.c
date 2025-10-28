@@ -37,13 +37,13 @@ int rx_user_ctx_init(eslab_t *rx_user_ctx_slab, uint32_t rx_depth)
     }
 
     uint32_t size = sizeof(rx_user_ctx_t) + sizeof(rx_user_ctx_head_t);
-    char *buf = urpc_dbuf_malloc(URPC_DBUF_TYPE_QUEUE, size * (rx_depth + 1));
+    char *buf = urpc_dbuf_malloc(URPC_DBUF_TYPE_QUEUE, size * rx_depth);
     if (buf == NULL) {
         URPC_LIB_LOG_ERR("calloc slab memory failed\n");
         return URPC_FAIL;
     }
 
-    eslab_init(rx_user_ctx_slab, buf, size, (rx_depth + 1));
+    eslab_init(rx_user_ctx_slab, buf, size, rx_depth);
     return URPC_SUCCESS;
 }
 
