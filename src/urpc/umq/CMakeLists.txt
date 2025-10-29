@@ -6,8 +6,9 @@ include_directories(${CMAKE_CURRENT_LIST_DIR}/../include/umq)
 include_directories(${CMAKE_CURRENT_LIST_DIR}/../include/umq/transport_layer)
 include_directories(${CMAKE_CURRENT_LIST_DIR}/qbuf)
 include_directories(${CMAKE_CURRENT_LIST_DIR}/../util)
-
+include_directories(${CMAKE_CURRENT_LIST_DIR}/dfx)
 include_directories(${CMAKE_CURRENT_LIST_DIR})
+include(${CMAKE_SOURCE_DIR}/urpc/umq/dfx/CMakeLists.txt)
 
 add_subdirectory(qbuf)
 add_subdirectory(umq_ub)

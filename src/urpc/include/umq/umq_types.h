@@ -111,7 +111,9 @@ typedef struct umq_trans_info {
 /* umq feature */
 #define UMQ_FEATURE_API_BASE                (0)         // enable base feature. set when use umq_enqueue/umq_dequeue
 #define UMQ_FEATURE_API_PRO                 (1)         // enable pro feature. set when use umq_post/umq_poll
-#define UMQ_FEATURE_ENABLE_TOKEN_POLICY (1 << 1)        // enable token policy.
+#define UMQ_FEATURE_ENABLE_TOKEN_POLICY     (1 << 1)    // enable token policy.
+#define UMQ_FEATURE_ENABLE_STATS            (1 << 2)    // enable stats collection
+#define UMQ_FEATURE_ENABLE_PERF             (1 << 3)    // enable performance collection   
 
 typedef struct umq_init_cfg {
     umq_buf_mode_t buf_mode;
@@ -200,6 +202,177 @@ typedef struct umq_alloc_option {
     uint32_t flag;                          // indicates which below property takes effect
     uint16_t headroom_size;
 } umq_alloc_option_t;
+
+typedef enum  umq_dfx_module_id {
+    UMQ_DFX_MODULE_PERF,
+    UMQ_DFX_MODULE_STATS,
+    UMQ_DFX_MODULE_MAX
+} umq_dfx_module_id_t;
+
+typedef enum umq_perf_cmd_id {
+    UMQ_PERF_CMD_START,
+    UMQ_PERF_CMD_STOP,
+    UMQ_PERF_CMD_CLEAR,
+    UMQ_PERF_CMD_GET_RESULT,
+    UMQ_PERF_CMD_MAX,
+} umq_perf_cmd_id_t;
+
+typedef enum umq_stats_cmd_id {
+    UMQ_STATS_CMD_START,
+    UMQ_STATS_CMD_STOP,
+    UMQ_STATS_CMD_CLEAR,
+    UMQ_STATS_CMD_GET_RESULT,
+    UMQ_STATS_CMD_MAX
+} umq_stats_cmd_id_t;
+
+typedef enum umq_stats_type {
+    UMQ_STATS_TYPE_SEND,                // send cnt
+    UMQ_STATS_TYPE_RECEIVE,             // recv cnt
+    UMQ_STATS_TYPE_READ,                // read cnt
+    UMQ_STATS_TYPE_MAX,
+} umq_stats_type_t;
+
+typedef enum umq_err_stats_type {
+    UMQ_ERR_STATS_TYPE_POST_PARM_INVALID,                   // post parmeter invalid cnt
+    UMQ_ERR_STATS_TYPE_POST_SEND,                           // post send cnt
+    UMQ_ERR_STATS_TYPE_POST_RECV,                           // post recv cnt
+    UMQ_ERR_STATS_TYPE_POST_IO_DIRECTION_INVALID,           // post io direction invalid cnt
+    UMQ_ERR_STATS_TYPE_POST_DATA_SIZE_INVALID,              // post qbuf data size invalid cnt
+    UMQ_ERR_STATS_TYPE_POST_SGE_NUM_INVALID,                // post sge num invalid cnt
+    UMQ_ERR_STATS_TYPE_POST_WR_COUNT_INVALID,               // post wr count invalid cnt
+
+    UMQ_ERR_STATS_TYPE_POST_BIG_DATA,                       // post send big data cnt
+
+    UMQ_ERR_STATS_TYPE_POLL_PARM_INVALID,                   // poll cnt
+    UMQ_ERR_STATS_TYPE_POLL_TX,                             // poll tx failed
+    UMQ_ERR_STATS_TYPE_POLL_RX,                             // poll rx failed
+    UMQ_ERR_STATS_TYPE_POLL_IO_DIRECTION_INVALID,           // poll io direcion invalid cnt
+
+    UMQ_ERR_STATS_TYPE_READ,                                // read failed 
+    UMQ_ERR_STATS_TYPE_READ_BIND_CTX_INVALID,               // read bind ctx invalid cnt
+    UMQ_ERR_STATS_TYPE_READ_TSEG_INVALID,                   // read tseg ctx invalid cnt
+
+    UMQ_ERR_STATS_TYPE_ENQUEUE_PARM_INVALID,                // enqueue parameter invalid cnt
+    UMQ_ERR_STATS_TYPE_ENQUEUE_DATA_NUM_INVALID,            // enqueue data num invalid cnt
+    UMQ_ERR_STATS_TYPE_ENQUEUE_POST_TX_BATCH,               // eneueue post tx batch failed
+    UMQ_ERR_STATS_TYPE_ENQUEUE_SGE_NUM_INVALID,             // enqueue sge num invalid cnt
+
+    UMQ_ERR_STATS_TYPE_DEQUEUE_PARM_INVALID,                // dequeue parameter invalid cnt
+    UMQ_ERR_STATS_TYPE_DEQUEUE_BIND_CTX_INVALID,            // dequeue bind ctx invalid cnt
+    UMQ_ERR_STATS_TYPE_DEQUEUE_SHM_QBUF,                    // dequeue shm qbuf cnt
+
+    UMQ_ERR_STATS_TYPE_QBUF_ALLOC,                          // qbuf alloc cnt
+    UMQ_ERR_STATS_TYPE_RX_BUF_CTX_ALLOC,                    // rx buf ctx alloc cnt
+    UMQ_ERR_STATS_TYPE_MAX,
+} umq_err_stats_type_t;
+
+typedef struct umq_stats_info_instance {
+    uint64_t stats[UMQ_STATS_TYPE_MAX];
+    uint64_t umqh;
+} umq_stats_info_instance_t;
+
+typedef struct umq_stats_infos {
+    uint64_t err_stats[UMQ_ERR_STATS_TYPE_MAX];
+    uint32_t stats_info_num;
+    umq_stats_info_instance_t stats_info[0];
+} umq_stats_infos_t;
+
+#define UMQ_PERF_QUANTILE_MAX_NUM (8u)
+
+typedef enum umq_perf_record_type {
+    /* record point for umq_enqueue */
+    UMQ_PERF_RECORD_ENQUEUE,
+    /* record point for umq_dequeue */
+    UMQ_PERF_RECORD_DEQUEUE,
+    /* record point for umq_dequeue empty */
+    UMQ_PERF_RECORD_DEQUEUE_EMPTY,
+    /* record point for umq_post_all */
+    UMQ_PERF_RECORD_POST_ALL,
+    /* record point for umq_post_tx */
+    UMQ_PERF_RECORD_POST_TX,
+    /* record point for umq_post_rx */
+    UMQ_PERF_RECORD_POST_RX,
+    /* record point for umq_poll_all */
+    UMQ_PERF_RECORD_POLL_ALL,
+    /* record point for umq_poll_tx */
+    UMQ_PERF_RECORD_POLL_TX,
+    /* record point for umq_poll_rx */
+    UMQ_PERF_RECORD_POLL_RX,
+    /* record point for umq_poll_all when poll is empty */
+    UMQ_PERF_RECORD_POLL_ALL_EMPTY,
+    /* record point for umq_poll_tx when tx is empty */
+    UMQ_PERF_RECORD_POLL_TX_EMPTY,
+    /* record point for umq_poll_rx when rx is empty */
+    UMQ_PERF_RECORD_POLL_RX_EMPTY,
+    /* record point for umq_notify */
+    UMQ_PERF_RECORD_NOTIFY,
+    /* record point for transport post send in umq_enqueue and umq_post */
+    UMQ_PERF_RECORD_TRANSPORT_POST_SEND,
+    /* record point for transport post recv in umq_enqueue and umq_post */
+    UMQ_PERF_RECORD_TRANSPORT_POST_RECV,
+    /* record point for transport poll tx in umq_dequeue and umq_poll */
+    UMQ_PERF_RECORD_TRANSPORT_POLL_TX,
+    /* record point for transport poll rx in umq_dequeue and umq_poll */
+    UMQ_PERF_RECORD_TRANSPORT_POLL_RX,
+    /* record point for transport poll tx in umq_dequeue and umq_poll when tx is empty */
+    UMQ_PERF_RECORD_TRANSPORT_POLL_TX_EMPTY,
+    /* record point for transport poll rx in umq_dequeue and umq_poll when rx is empty */
+    UMQ_PERF_RECORD_TRANSPORT_POLL_RX_EMPTY,
+    /* record point for transport read in umq_dequeue and umq_poll */
+    UMQ_PERF_RECORD_TRANSPORT_READ,
+    /* record point for transport send imm in umq_dequeue and umq_poll */
+    UMQ_PERF_RECORD_TRANSPORT_SEND_IMM,
+    /* record point for transport write in umq_notify */
+    UMQ_PERF_RECORD_TRANSPORT_WRITE_IMM,
+    UMQ_PERF_RECORD_TYPE_MAX,
+} umq_perf_record_type_t;
+
+typedef struct umq_perf_record {
+    struct {
+        uint64_t accumulation;
+        uint64_t min;
+        uint64_t max;
+        uint64_t cnt;
+        uint64_t bucket[UMQ_PERF_QUANTILE_MAX_NUM + 1];
+    } type_record[UMQ_PERF_RECORD_TYPE_MAX];
+    bool is_used;
+} umq_perf_record_t;
+
+typedef struct perf_in_parm {
+    // Record data within the specified interval
+    uint64_t thresh_array[UMQ_PERF_QUANTILE_MAX_NUM];
+    uint32_t thresh_num;
+} perf_in_parm_t;
+
+typedef struct umq_perf_infos {
+    uint32_t perf_record_num;
+    umq_perf_record_t *perf_record[0];
+} umq_perf_infos_t;
+
+typedef struct umq_dfx_cmd {
+    umq_dfx_module_id_t module_id;
+    union {
+        umq_perf_cmd_id_t perf_cmd_id;
+        umq_stats_cmd_id_t stats_cmd_id;
+    };
+    union {
+        perf_in_parm_t perf_in_parm;
+    };
+} umq_dfx_cmd_t;
+
+typedef struct umq_dfx_result {
+    umq_dfx_module_id_t module_id;
+    union {
+        umq_perf_cmd_id_t perf_cmd_id;
+        umq_stats_cmd_id_t stats_cmd_id;
+    };
+    int err_code;
+    union {
+        char *perf_char;
+        umq_perf_infos_t *perf_out_parm;
+        umq_stats_infos_t *stats_out_parm;
+    };
+} umq_dfx_result_t;
 
 #ifdef __cplusplus
 }

@@ -8,12 +8,15 @@
 #include <stdlib.h>
 #include <dlfcn.h>
 
+#include "dfx.h"
+#include "perf.h"
 #include "umq_vlog.h"
 #include "umq_inner.h"
 #include "umq_errno.h"
 
 int umq_post(uint64_t umqh, umq_buf_t *qbuf, umq_io_direction_t io_direction, umq_buf_t **bad_qbuf)
 {
+    uint64_t start_timestamp = umq_perf_get_start_timestamp();
     umq_t *umq = (umq_t *)(uintptr_t)umqh;
 
     if ((umq == NULL) || (umq->umqh_tp == UMQ_INVALID_HANDLE) || (umq->pro_tp_ops == NULL) ||
@@ -22,11 +25,23 @@ int umq_post(uint64_t umqh, umq_buf_t *qbuf, umq_io_direction_t io_direction, um
         return UMQ_FAIL;
     }
 
-    return umq->pro_tp_ops->umq_tp_post(umq->umqh_tp, qbuf, io_direction, bad_qbuf);
+    int ret = umq->pro_tp_ops->umq_tp_post(umq->umqh_tp, qbuf, io_direction, bad_qbuf);
+    umq_perf_record_write_with_direction(UMQ_PERF_RECORD_POST_ALL, start_timestamp, io_direction);
+    return ret;
+}
+
+static inline void umq_perf_record_write_poll(uint64_t start, umq_io_direction_t io_direction, bool is_empty)
+{
+    if (is_empty) {
+        umq_perf_record_write_with_direction(UMQ_PERF_RECORD_POLL_ALL_EMPTY, start, io_direction);
+        return;
+    }
+    umq_perf_record_write_with_direction(UMQ_PERF_RECORD_POLL_ALL, start, io_direction);
 }
 
 int umq_poll(uint64_t umqh, umq_io_direction_t io_direction, umq_buf_t **buf, uint32_t max_buf_count)
 {
+    uint64_t start_timestamp = umq_perf_get_start_timestamp();
     umq_t *umq = (umq_t *)(uintptr_t)umqh;
 
     if ((umq == NULL) || (umq->umqh_tp == UMQ_INVALID_HANDLE) || (umq->pro_tp_ops == NULL) ||
@@ -35,7 +50,9 @@ int umq_poll(uint64_t umqh, umq_io_direction_t io_direction, umq_buf_t **buf, ui
         return UMQ_FAIL;
     }
 
-    return umq->pro_tp_ops->umq_tp_poll(umq->umqh_tp, io_direction, buf, max_buf_count);
+    int ret = umq->pro_tp_ops->umq_tp_poll(umq->umqh_tp, io_direction, buf, max_buf_count);
+    umq_perf_record_write_poll(start_timestamp, io_direction, ret == 0);
+    return ret;
 }
 
 int umq_interrupt_fd_get(uint64_t umqh, umq_interrupt_option_t *option)

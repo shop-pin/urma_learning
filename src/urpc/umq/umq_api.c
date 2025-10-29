@@ -10,6 +10,8 @@
 #include <limits.h>
 #include <malloc.h>
 
+#include "dfx.h"
+#include "perf.h"
 #include "umq_vlog.h"
 #include "umq_inner.h"
 #include "umq_qbuf_pool.h"
@@ -178,6 +180,7 @@ void umq_uninit(void)
         return;
     }
 
+    umq_dfx_uninit();
     uint8_t fw_i;
 
     for (fw_i = 0; fw_i < UMQ_TRANS_MODE_MAX; fw_i++) {
@@ -311,6 +314,11 @@ int umq_init(umq_init_cfg_t *cfg)
     };
     if (umq_qbuf_pool_init(&qbuf_cfg) != UMQ_SUCCESS) {
         UMQ_VLOG_ERR("qbuf poll init failed\n");
+        goto INIT_FAIL;
+    }
+
+    if(umq_dfx_init(cfg) != UMQ_SUCCESS) {
+        UMQ_VLOG_ERR("umq dfx init failed\n");
         goto INIT_FAIL;
     }
 
@@ -502,6 +510,7 @@ umq_buf_t *umq_data_to_head(void *data)
 
 int umq_enqueue(uint64_t umqh, umq_buf_t *qbuf, umq_buf_t **bad_qbuf)
 {
+    uint64_t start_timestamp = umq_perf_get_start_timestamp();
     umq_t *umq = (umq_t *)(uintptr_t)umqh;
 
     if ((umq == NULL) || (umq->umqh_tp == UMQ_INVALID_HANDLE) || (umq->tp_ops == NULL) ||
@@ -510,11 +519,14 @@ int umq_enqueue(uint64_t umqh, umq_buf_t *qbuf, umq_buf_t **bad_qbuf)
         return UMQ_FAIL;
     }
 
-    return umq->tp_ops->umq_tp_enqueue(umq->umqh_tp, qbuf, bad_qbuf);
+    int ret = umq->tp_ops->umq_tp_enqueue(umq->umqh_tp, qbuf, bad_qbuf);
+    umq_perf_record_write(UMQ_PERF_RECORD_ENQUEUE, start_timestamp);
+    return ret;
 }
 
 umq_buf_t *umq_dequeue(uint64_t umqh)
 {
+    uint64_t start_timestamp = umq_perf_get_start_timestamp();
     umq_t *umq = (umq_t *)(uintptr_t)umqh;
 
     if ((umq == NULL) || (umq->umqh_tp == UMQ_INVALID_HANDLE) || (umq->tp_ops == NULL) ||
@@ -523,11 +535,14 @@ umq_buf_t *umq_dequeue(uint64_t umqh)
         return NULL;
     }
 
-    return umq->tp_ops->umq_tp_dequeue(umq->umqh_tp);
+    umq_buf_t *ret = umq->tp_ops->umq_tp_dequeue(umq->umqh_tp);
+    umq_perf_record_write(UMQ_PERF_RECORD_ENQUEUE, start_timestamp);
+    return ret;
 }
 
 void umq_notify(uint64_t umqh)
 {
+    uint64_t start_timestamp = umq_perf_get_start_timestamp();
     umq_t *umq = (umq_t *)(uintptr_t)umqh;
 
     if ((umq == NULL) || (umq->umqh_tp == UMQ_INVALID_HANDLE) || (umq->tp_ops == NULL) ||
@@ -536,7 +551,8 @@ void umq_notify(uint64_t umqh)
         return;
     }
 
-    return umq->tp_ops->umq_tp_notify(umq->umqh_tp);
+    umq->tp_ops->umq_tp_notify(umq->umqh_tp);
+    umq_perf_record_write(UMQ_PERF_RECORD_NOTIFY, start_timestamp);
 }
 
 int umq_rearm_interrupt(uint64_t umqh, bool solicated, umq_interrupt_option_t *option)

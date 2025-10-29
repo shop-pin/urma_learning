@@ -10,6 +10,8 @@
 #include <pthread.h>
 #include <sys/queue.h>
 
+#include "dfx.h"
+#include "perf.h"
 #include "urpc_util.h"
 #include "urpc_list.h"
 #include "urma_api.h"
@@ -332,7 +334,9 @@ static int umq_ub_post_rx(uint64_t umqh, umq_buf_t *qbuf, umq_buf_t **bad_qbuf)
         }
     }
 
+    uint64_t start_timestamp = umq_perf_get_start_timestamp_with_feature(queue->dev_ctx->feature);
     if (urma_post_jetty_recv_wr(queue->jetty, recv_wr, &bad_wr) < 0) {
+        umq_perf_record_write(UMQ_PERF_RECORD_TRANSPORT_POST_RECV, start_timestamp);
         UMQ_VLOG_ERR("urma_post_jetty_recv_wr failed\n");
         if (bad_wr != NULL) {
             *bad_qbuf = (umq_buf_t *)(uintptr_t)bad_wr->user_ctx;
@@ -343,7 +347,7 @@ static int umq_ub_post_rx(uint64_t umqh, umq_buf_t *qbuf, umq_buf_t **bad_qbuf)
         umq_dec_ref(queue->dev_ctx->io_lock_free, &queue->ref_cnt);
         return UMQ_FAIL;
     }
-
+    umq_perf_record_write_with_feature(UMQ_PERF_RECORD_TRANSPORT_POST_RECV, start_timestamp, queue->dev_ctx->feature);
     umq_dec_ref(queue->dev_ctx->io_lock_free, &queue->ref_cnt);
     return UMQ_SUCCESS;
 
@@ -1092,7 +1096,10 @@ static int umq_ub_send_big_data(ub_queue_t *queue, umq_buf_t **buffer)
         .tjetty = queue->bind_ctx->tjetty,
         .opcode = URMA_OPC_SEND_IMM};
     urma_jfs_wr_t *bad_wr = NULL;
+
+    uint64_t start_timestamp = umq_perf_get_start_timestamp_with_feature(queue->dev_ctx->feature);
     urma_status_t status = urma_post_jetty_send_wr(queue->jetty, &urma_wr, &bad_wr);
+    umq_perf_record_write_with_feature(UMQ_PERF_RECORD_TRANSPORT_SEND_IMM, start_timestamp, queue->dev_ctx->feature);
     if (status != URMA_SUCCESS) {
         umq_dec_ref(queue->dev_ctx->io_lock_free, &queue->ref_cnt);
         UMQ_VLOG_ERR("urma_post_jetty_send_wr failed, status %d\n", status);
@@ -1285,7 +1292,9 @@ static int umq_ub_post_tx(uint64_t umqh, umq_buf_t *qbuf, umq_buf_t **bad_qbuf)
     }
 
     urma_jfs_wr_t *bad_wr = NULL;
+    uint64_t start_timestamp = umq_perf_get_start_timestamp_with_feature(queue->dev_ctx->feature);
     urma_status_t status = urma_post_jetty_send_wr(queue->jetty, urma_wr, &bad_wr);
+    umq_perf_record_write_with_feature(UMQ_PERF_RECORD_TRANSPORT_POST_SEND, start_timestamp, queue->dev_ctx->feature);
     if (status != URMA_SUCCESS) {
         if (bad_wr != NULL) {
             *bad_qbuf = (umq_buf_t *)(uintptr_t)bad_wr->user_ctx;
@@ -1372,7 +1381,9 @@ int umq_ub_read(uint64_t umqh_tp, umq_buf_t *rx_buf, umq_ub_imm_t imm)
             .tjetty = queue->bind_ctx->tjetty};
 
         urma_jfs_wr_t *bad_wr = NULL;
+        uint64_t start_timestamp = umq_perf_get_start_timestamp_with_feature(queue->dev_ctx->feature);
         urma_status_t status = urma_post_jetty_send_wr(queue->jetty, &urma_wr, &bad_wr);
+        umq_perf_record_write_with_feature(UMQ_PERF_RECORD_TRANSPORT_READ, start_timestamp, queue->dev_ctx->feature);
         if (status != URMA_SUCCESS) {
             umq_dec_ref(queue->dev_ctx->io_lock_free, &queue->ref_cnt);
             UMQ_VLOG_ERR("urma_post_jetty_send_wr failed, status %d\n", status);
@@ -1413,7 +1424,9 @@ static int umq_ub_send_imm(ub_queue_t *queue, uint16_t msg_id)
         .tjetty = queue->bind_ctx->tjetty,
         .opcode = URMA_OPC_SEND_IMM};
     urma_jfs_wr_t *bad_wr = NULL;
+    uint64_t start_timestamp = umq_perf_get_start_timestamp_with_feature(queue->dev_ctx->feature);
     urma_status_t status = urma_post_jetty_send_wr(queue->jetty, &urma_wr, &bad_wr);
+    umq_perf_record_write_with_feature(UMQ_PERF_RECORD_TRANSPORT_SEND_IMM, start_timestamp, queue->dev_ctx->feature);
     if (status != URMA_SUCCESS) {
         umq_dec_ref(queue->dev_ctx->io_lock_free, &queue->ref_cnt);
         UMQ_VLOG_ERR("urma_post_jetty_send_wr failed, status %d\n", status);
@@ -1524,7 +1537,9 @@ static int umq_ub_poll_rx(uint64_t umqh, umq_buf_t **buf, uint32_t buf_count)
     umq_inc_ref(queue->dev_ctx->io_lock_free, &queue->ref_cnt);
 
     urma_cr_t cr[max_batch];
+    uint64_t start_timestamp = umq_perf_get_start_timestamp_with_feature(queue->dev_ctx->feature);
     int rx_cr_cnt = urma_poll_jfc(queue->jfr_jfc, max_batch, cr);
+    umq_perf_record_write_with_feature(UMQ_PERF_RECORD_TRANSPORT_POLL_RX, start_timestamp, queue->dev_ctx->feature);
     if (rx_cr_cnt < 0) {
         umq_dec_ref(queue->dev_ctx->io_lock_free, &queue->ref_cnt);
         UMQ_VLOG_ERR("UB RX reports rx_cr_cnt[%d]\n", rx_cr_cnt);
@@ -1565,7 +1580,9 @@ static int umq_ub_poll_tx(uint64_t umqh, umq_buf_t **buf, uint32_t buf_count)
     umq_inc_ref(queue->dev_ctx->io_lock_free, &queue->ref_cnt);
 
     urma_cr_t cr[max_batch];
+    uint64_t start_timestamp = umq_perf_get_start_timestamp_with_feature(queue->dev_ctx->feature);
     int tx_cr_cnt = urma_poll_jfc(queue->jfs_jfc, max_batch, cr);
+    umq_perf_record_write_with_feature(UMQ_PERF_RECORD_TRANSPORT_POLL_TX, start_timestamp, queue->dev_ctx->feature);
     if (tx_cr_cnt < 0) {
         umq_dec_ref(queue->dev_ctx->io_lock_free, &queue->ref_cnt);
         UMQ_VLOG_ERR("UB TX reports tx_cr_cnt[%d]\n", tx_cr_cnt);
@@ -1858,7 +1875,9 @@ int umq_ub_write_imm(uint64_t umqh_tp, uint64_t target_addr, uint32_t len)
     };
 
     urma_jfs_wr_t *bad_wr = NULL;
+    uint64_t start_timestamp = umq_perf_get_start_timestamp_with_feature(queue->dev_ctx->feature);
     urma_status_t status = urma_post_jetty_send_wr(queue->jetty, &urma_wr, &bad_wr);
+    umq_perf_record_write_with_feature(UMQ_PERF_RECORD_TRANSPORT_WRITE_IMM, start_timestamp, queue->dev_ctx->feature);
     if (status != URMA_SUCCESS) {
         UMQ_VLOG_ERR("urma_post_jetty_send_wr failed, status %d\n", status);
         return UMQ_FAIL;
