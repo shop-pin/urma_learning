@@ -32,9 +32,11 @@ static struct option g_long_options[] = {
 
     {"buf-mode", required_argument, NULL, 'b'},
     {"interrupt", no_argument, NULL, 'I'},
-    {"local-ipc", no_argument, NULL, 'L'},
     {"cna", required_argument, NULL, 'N'},
     {"deid", required_argument, NULL, 'D'},
+    {"eid-index", required_argument, NULL, 'E'},
+    {"buf_multiplex", no_argument, NULL, 'B'},
+    {"num", required_argument, NULL, 'n'},
 
     {NULL, 0, NULL, 0}
 };
@@ -53,17 +55,18 @@ static void usage(void)
     (void)printf("  -u, --cpu-core <cpu_core>           from which cpu core to set affinity for each thread\n");
     (void)printf("      --server                        to launch server.\n");
     (void)printf("      --client                        to launch client.\n");
-    
+
     (void)printf("      --buf-mode                      set umq_buf_mode_t.\n");
     (void)printf("  -f, --feature <feature>             umq feature, 0 for base api, 1 for pro api\n");
     (void)printf("      --interrupt                     set interrupt mode.\n");
-    (void)printf("      --local-ipc                     use local ipc.\n");
     (void)printf("      --cna                           set cna for ubmm mode.\n");
     (void)printf("      --deid                          set deid for ubmm mode.\n");
     (void)printf("  -s, --size <size>                   size of request, not more than 8192\n");
     (void)printf("      --trans-mode                    set umq_trans_mode_t.\n");
     (void)printf("      --tx-depth                      set queue tx-depth(default 512).\n");
     (void)printf("      --rx-depth                      set queue rx-depth(default 512).\n");
+    (void)printf("      --eid-index                     set eid index.\n");
+    (void)printf("      --num                           set number of iterations.\n");
     (void)printf("  -h, --help                          show help info.\n\n");
 }
 
@@ -77,9 +80,13 @@ static void init_cfg(umq_perftest_config_t *cfg)
     config->size = DEFAULT_REQUEST_SIZE_4K;
     config->tx_depth = DEFAULT_DEPTH;
     config->rx_depth = DEFAULT_DEPTH;
+    config->interrupt = false;
+    config->buf_multiplex = false;
 
     cfg->buf_mode = UMQ_BUF_SPLIT;
     cfg->trans_mode = UMQ_TRANS_MODE_IB;
+    cfg->eid_idx = 0;
+    cfg->test_round = DEFAULT_LAT_TEST_ROUND;
 }
 
 int umq_perftest_parse_arguments(int argc, char **argv, umq_perftest_config_t *cfg)
@@ -92,7 +99,7 @@ int umq_perftest_parse_arguments(int argc, char **argv, umq_perftest_config_t *c
     init_cfg(cfg);
 
     while (1) {
-        int c = getopt_long(argc, argv, "c:d:f:l:r:p:u:s:hN:D:", g_long_options, NULL);
+        int c = getopt_long(argc, argv, "c:d:f:l:r:p:u:s:hN:D:E:n:", g_long_options, NULL);
         if (c == -1) {
             break;
         }
@@ -152,14 +159,20 @@ int umq_perftest_parse_arguments(int argc, char **argv, umq_perftest_config_t *c
             case 'I':
                 cfg->config.interrupt = true;
                 break;
-            case 'L':
-                cfg->local_ipc = true;
+            case 'B':
+                cfg->config.buf_multiplex = true;
                 break;
             case 'N':
                 cfg->cna = (uint16_t)strtoul(optarg, NULL, 0);
                 break;
             case 'D':
                 cfg->deid = (uint32_t)strtoul(optarg, NULL, 0);
+                break;
+            case 'E':
+                cfg->eid_idx = (uint16_t)strtoul(optarg, NULL, 0);
+                break;
+            case 'n':
+                cfg->test_round = (uint32_t)strtoul(optarg, NULL, 0);
                 break;
             default:
                 usage();

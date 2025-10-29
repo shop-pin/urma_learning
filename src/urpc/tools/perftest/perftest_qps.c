@@ -7,6 +7,8 @@
 
 #include <stdatomic.h>
 #include <stdio.h>
+#include <sys/resource.h>
+#include <sys/time.h>
 #include <unistd.h>
 
 #include "ub_get_clock.h"
@@ -15,6 +17,7 @@
 #include "perftest_qps.h"
 
 #define QPS_MESSAGE_SIZE 4096
+#define PERCENT_NUM 100
 
 #define QPS_THREAD_FORMAT "       %-7.3lf"
 #define QPS_FIRST_THREAD_FORMAT "     %-7.3lf"
@@ -43,7 +46,7 @@ static void urpc_perftest_print_qps_title(perftest_qps_ctx_t *ctx)
     char title[QPS_MESSAGE_SIZE];
 
     if (!ctx->show_thread) {
-        (void)printf("  qps[Mpps]    BW[MB/Sec]\n");
+        (void)printf("  qps[Mpps]    BW[MB/Sec]     cpu-utilization[%%]\n");
         return;
     }
 
@@ -67,7 +70,7 @@ static void urpc_perftest_print_qps_title(perftest_qps_ctx_t *ctx)
     (void)printf("%s\n", title);
 }
 
-// 用cycle计算qps的精确时间, sleep仅用于定时输出结果
+// use cycle to calculate the precise time for QPS; sleep is only used for timed output of results.
 void perftest_print_qps(perftest_qps_ctx_t *ctx)
 {
     char result[QPS_MESSAGE_SIZE];
@@ -82,19 +85,33 @@ void perftest_print_qps(perftest_qps_ctx_t *ctx)
     uint64_t reqs_num = urpc_perftest_reqs_sum_get(reqs_old, ctx->thread_num);
     uint64_t begin = get_cycles();
 
+    struct rusage ru;
+    double end_cpu_time;
+    getrusage(RUSAGE_SELF, &ru);
+    double begin_cpu_time =
+        ru.ru_utime.tv_sec + ru.ru_stime.tv_sec + (ru.ru_stime.tv_usec + ru.ru_utime.tv_usec) / (double)PERFTEST_1M;
+
     urpc_perftest_print_qps_title(ctx);
-    while (!perftest_get_status()) {
+    uint64_t start_cycle = get_cycles();
+    while (!is_perftest_force_quit() && (get_cycles() - start_cycle) / cycles_to_units < ITER_MAX_WAIT_TIME_US) {
         (void)sleep(1);
 
         perftest_reqs_get(reqs, ctx, PERFTEST_THREAD_MAX_NUM);
         cur_sum = urpc_perftest_reqs_sum_get(reqs, ctx->thread_num);
         end = get_cycles();
+        getrusage(RUSAGE_SELF, &ru);
+        end_cpu_time = ru.ru_utime.tv_sec + ru.ru_stime.tv_sec +
+                       (ru.ru_stime.tv_usec + ru.ru_utime.tv_usec) / (double)PERFTEST_1M;
+        double real_time_diff = (double)(end - begin) / (cycles_to_units);
+        // show cpu_usage
 
         // show qps
-        qps = (double)(cur_sum - reqs_num) * cycles_to_units / (double)(end - begin);
+        qps = (double)(cur_sum - reqs_num) / real_time_diff;
 
         int s = 0;
-        ret = sprintf(result, "  %-7.6lf     %-7.3lf", qps, qps * PERFTEST_1M * ctx->size_total / PERFTEST_1MB);
+        ret = sprintf(result, "  %-7.6lf     %-7.3lf           %-7.2lf", qps,
+                      qps * PERFTEST_1M * ctx->size_total / PERFTEST_1MB,
+                      (end_cpu_time - begin_cpu_time) * PERCENT_NUM * PERFTEST_1M / real_time_diff);
         if (ret < 0) {
             LOG_PRINT("fail to get qps string\n");
             ret = 0;
@@ -122,5 +139,6 @@ OUTPUT:
         (void)printf("%s\n", result);
         reqs_num = cur_sum;
         begin = end;
+        begin_cpu_time = end_cpu_time;
     }
 }

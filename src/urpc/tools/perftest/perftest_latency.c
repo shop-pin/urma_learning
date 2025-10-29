@@ -18,6 +18,8 @@
 
 #define SIMULATE_USER_HDR_SIZE  192
 #define SERVER_USE_SGE_SIZE 256
+#define UNIDIRECTIONAL_LATENCY_FACTOR 1
+#define BIDIRECTIONAL_LATENCY_FACTOR 2
 
 static int urpc_perftest_latency_compare(const void *src, const void *dst)
 {
@@ -39,26 +41,37 @@ static inline uint32_t urpc_perftest_get_latency_percentile(uint32_t measure_cnt
     return percentile > measure_cnt - 1 ? measure_cnt - 1 : percentile;
 }
 
-void perftest_calculate_latency(uint64_t *cycles, uint32_t iters, uint32_t msg_size)
+static int perftest_calculate_rtt_factor(int cmd)
+{
+    if (cmd == SEND_LATENCY_MODE) {
+        return BIDIRECTIONAL_LATENCY_FACTOR;
+    }
+    return UNIDIRECTIONAL_LATENCY_FACTOR;
+}
+
+void perftest_calculate_latency(uint64_t *cycles, uint32_t iters, uint32_t msg_size, int mode)
 {
     if (iters <= LATENCY_MEASURE_TAIL) {
         return;
     }
 
+    int rtt_factor = perftest_calculate_rtt_factor(mode);
     double cycles_to_units = get_cpu_mhz(false);
+    double cycles_rtt_quotient = cycles_to_units * rtt_factor;
+
     uint32_t measure_cnt = iters;
     qsort(cycles, (size_t)measure_cnt, sizeof(uint64_t), urpc_perftest_latency_compare);
     measure_cnt = measure_cnt - LATENCY_MEASURE_TAIL;  // Remove two largest values
 
     double average_sum = 0.0, average = 0.0;
     for (uint32_t i = 0; i < measure_cnt; i++) {
-        average_sum += (cycles[i] / cycles_to_units);
+        average_sum += (cycles[i] / cycles_rtt_quotient);
     }
     average = average_sum / measure_cnt;
 
     double stdev, temp_var, stdev_sum = 0;
     for (uint32_t i = 0; i < measure_cnt; i++) {
-        temp_var = average - (cycles[i] / cycles_to_units);
+        temp_var = average - (cycles[i] / cycles_rtt_quotient);
         stdev_sum += temp_var * temp_var;
     }
     stdev = sqrt(stdev_sum / measure_cnt);
@@ -73,10 +86,10 @@ void perftest_calculate_latency(uint64_t *cycles, uint32_t iters, uint32_t msg_s
                  "99%%[us]  99.9%%[us]  99.99%%[us]  99.999%%[us]\n");
     (void)printf(" %-7u %-10u  %-7.2lf    %-7.2lf    %-7.2lf       %-7.2lf    %-7.2lf      "
                  "%-7.2lf  %-7.2lf    %-7.2lf     %-7.2lf\n",
-        msg_size, iters, cycles[0] / cycles_to_units, cycles[measure_cnt - 1] / cycles_to_units,
-        cycles[iters_50] / cycles_to_units, average, stdev, cycles[iters_99] / cycles_to_units,
-        cycles[iters_99_9] / cycles_to_units, cycles[iters_99_99] / cycles_to_units,
-        cycles[iters_99_99_9] / cycles_to_units);
+        msg_size, iters, cycles[0] / cycles_rtt_quotient, cycles[measure_cnt - 1] / cycles_rtt_quotient,
+        cycles[iters_50] / cycles_rtt_quotient, average, stdev, cycles[iters_99] / cycles_rtt_quotient,
+        cycles[iters_99_9] / cycles_rtt_quotient, cycles[iters_99_99] / cycles_rtt_quotient,
+        cycles[iters_99_99_9] / cycles_rtt_quotient);
 }
 
 uint64_t get_total_cycle(uint32_t con_num, uint64_t *cycles)
@@ -93,7 +106,7 @@ uint64_t get_total_cycle(uint32_t con_num, uint64_t *cycles)
 void perftest_print_latency(perftest_latency_ctx_t *ctx)
 {
     // fake print func
-    while (!perftest_get_status()) {
+    while (!is_perftest_force_quit()) {
         (void)sleep(1);
     }
 }

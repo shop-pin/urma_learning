@@ -302,11 +302,13 @@ static void urpc_perftest_client_run_latency_finish(urpc_lib_perftest_latency_ar
 {
     LOG_PRINT("--------------------------------first wqe latency info---------------------------------\n");
     perftest_calculate_latency(
-        g_urpc_perftest_latency_ctx.first_cycles, g_urpc_perftest_latency_ctx.iters, lat_arg->cfg->size_total);
+        g_urpc_perftest_latency_ctx.first_cycles, g_urpc_perftest_latency_ctx.iters, lat_arg->cfg->size_total,
+        SEND_LATENCY_MODE);
     if (lat_arg->cfg->con_num > 1) {
         LOG_PRINT("--------------------------------left wqe latency info---------------------------------\n");
         perftest_calculate_latency(
-            g_urpc_perftest_latency_ctx.cycles, g_urpc_perftest_latency_ctx.iters, lat_arg->cfg->size_total);
+            g_urpc_perftest_latency_ctx.cycles, g_urpc_perftest_latency_ctx.iters, lat_arg->cfg->size_total,
+            SEND_LATENCY_MODE);
     }
 
     free(g_urpc_perftest_latency_ctx.cycles);
@@ -644,7 +646,7 @@ void urpc_perftest_run_latency(perftest_thread_arg_t *args, urpc_lib_perftest_la
 void urpc_perftest_print_latency(perftest_framework_config_t *cfg)
 {
     // fake print func
-    while (!perftest_get_status()) {
+    while (!is_perftest_force_quit()) {
         (void)sleep(1);
     }
 }

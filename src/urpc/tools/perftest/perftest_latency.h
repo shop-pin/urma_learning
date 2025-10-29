@@ -11,6 +11,8 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+#define SEND_LATENCY_MODE 0
+
 #ifdef __cplusplus
 #include <cstdint>
 #else
@@ -30,7 +32,7 @@ typedef struct perftest_latency_ctx {
 
 perftest_latency_ctx_t *get_perftest_latency_ctx(void);
 
-void perftest_calculate_latency(uint64_t *cycles, uint32_t iters, uint32_t msg_size);
+void perftest_calculate_latency(uint64_t *cycles, uint32_t iters, uint32_t msg_size, int mode);
 void perftest_print_latency(perftest_latency_ctx_t *ctx);
 
 uint64_t get_total_cycle(uint32_t con_num, uint64_t *cycles);

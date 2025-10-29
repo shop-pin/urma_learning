@@ -20,6 +20,21 @@
 
 perftest_latency_ctx_t g_perftest_latency_ctx = {0};
 
+static void set_pro_data(umq_buf_t *tmp, umq_perftest_latency_arg_t *lat_arg)
+{
+    while (tmp) {
+        umq_buf_pro_t *pro = (umq_buf_pro_t *)tmp->qbuf_ext;
+        pro->flag.value = 0;
+        pro->flag.bs.solicited_enable = 1;
+        pro->flag.bs.complete_enable = 1;
+        if (lat_arg->cfg->config.size < UMQ_ENABLE_INLINE_LIMIT_SIZE) {
+            pro->flag.bs.inline_flag = UMQ_INLINE_ENABLE;
+        }
+        pro->opcode = UMQ_OPC_SEND;
+        tmp = tmp->qbuf_next;
+    }
+}
+
 perftest_latency_ctx_t *get_perftest_latency_ctx(void)
 {
     return &g_perftest_latency_ctx;
@@ -29,30 +44,92 @@ static void umq_perftest_client_run_latency_finish(umq_perftest_latency_arg_t *l
 {
     LOG_PRINT("--------------------------------latency info---------------------------------\n");
     perftest_calculate_latency(
-        g_perftest_latency_ctx.cycles, g_perftest_latency_ctx.iters, lat_arg->cfg->config.size);
+        g_perftest_latency_ctx.cycles, g_perftest_latency_ctx.iters, lat_arg->cfg->config.size, SEND_LATENCY_MODE);
 
     free(g_perftest_latency_ctx.cycles);
     g_perftest_latency_ctx.cycles = NULL;
 }
 
-static void umq_perftest_server_run_latency_base(uint64_t umqh, umq_perftest_latency_arg_t *lat_arg)
+static void umq_perftest_server_run_latency_base_interrupt(uint64_t umqh, umq_perftest_latency_arg_t *lat_arg)
+{
+    umq_buf_t *bad_buf = NULL;
+    uint32_t size = lat_arg->cfg->config.size;
+    uint32_t test_round = lat_arg->cfg->test_round;
+    umq_interrupt_option_t interrupt_option = {
+        .flag = UMQ_INTERRUPT_FLAG_IO_DIRECTION,
+        .direction = UMQ_IO_RX,
+    };
+    bool buf_multiplex = lat_arg->cfg->config.buf_multiplex;
+    umq_buf_t *polled_buf = NULL;
+    if (umq_rearm_interrupt(umqh, false, &interrupt_option) != 0) {
+        LOG_PRINT("umq_rearm_interrupt failed\n");
+        goto FINISH;
+    }
+    while (g_perftest_latency_ctx.iters < test_round && !is_perftest_force_quit()) {
+        int32_t nevents = umq_wait_interrupt(umqh, INTERRUPT_MAX_WAIT_TIME_MS, &interrupt_option);
+        if (nevents < 1) {
+            LOG_PRINT("umq_wait_interrupt failed\n");
+            goto FINISH;
+        }
+        // recv req
+        polled_buf = umq_dequeue(umqh);
+        if (!buf_multiplex) {
+            umq_buf_free(polled_buf);
+            polled_buf = umq_buf_alloc(size, 1, umqh, NULL);
+            if (polled_buf == NULL) {
+                LOG_PRINT("alloc buf failed\n");
+                goto FINISH;
+            }
+        }
+
+        // send return
+        umq_ack_interrupt(umqh, (uint32_t)nevents, &interrupt_option);
+        if (umq_rearm_interrupt(umqh, false, &interrupt_option) != 0) {
+            LOG_PRINT("umq_rearm_interrupt failed\n");
+            goto FINISH;
+        }
+
+        int ret = umq_enqueue(umqh, polled_buf, &bad_buf);
+        if (ret == -EAGAIN) {
+            continue;
+        }
+        if (ret != UMQ_SUCCESS) {
+            LOG_PRINT("enqueue failed\n");
+            if (bad_buf != NULL) {
+                umq_buf_free(bad_buf);
+                bad_buf = NULL;
+            }
+            goto FINISH;
+        }
+        umq_notify(umqh);
+        g_perftest_latency_ctx.iters++;
+    }
+
+FINISH:
+    perftest_force_quit();
+}
+
+static void umq_perftest_server_run_latency_base_polling(uint64_t umqh, umq_perftest_latency_arg_t *lat_arg)
 {
     umq_buf_t *polled_buf = NULL;
     umq_buf_t *bad_buf = NULL;
-    while (g_perftest_latency_ctx.iters < DEFAULT_LAT_TEST_ROUND && !perftest_get_status()) {
-        // 接收请求
+    uint32_t size = lat_arg->cfg->config.size;
+    bool buf_multiplex = lat_arg->cfg->config.buf_multiplex;
+    while (g_perftest_latency_ctx.iters < lat_arg->cfg->test_round && !is_perftest_force_quit()) {
+        // recv req
         do {
             polled_buf = umq_dequeue(umqh);
-        } while (polled_buf == NULL);
-        umq_buf_free(polled_buf);
-
-        // 发送返回
-        umq_buf_t *resp_buf = umq_buf_alloc(lat_arg->cfg->config.size, 1, UMQ_INVALID_HANDLE, NULL);
-        if (resp_buf == NULL) {
-            LOG_PRINT("alloc buf failed\n");
-            goto FINISH;
+        } while (polled_buf == NULL && !is_perftest_force_quit());
+        if (!buf_multiplex) {
+            // send return
+            umq_buf_free(polled_buf);
+            polled_buf = umq_buf_alloc(size, 1, umqh, NULL);
+            if (polled_buf == NULL) {
+                LOG_PRINT("alloc buf failed\n");
+                goto FINISH;
+            }
         }
-        if (umq_enqueue(umqh, resp_buf, &bad_buf) != UMQ_SUCCESS) {
+        if (umq_enqueue(umqh, polled_buf, &bad_buf) != UMQ_SUCCESS) {
             LOG_PRINT("enqueue failed\n");
             if (bad_buf != NULL) {
                 umq_buf_free(bad_buf);
@@ -67,11 +144,21 @@ FINISH:
     perftest_force_quit();
 }
 
-static void umq_perftest_client_run_latency_base(uint64_t umqh, umq_perftest_latency_arg_t *lat_arg)
+static void umq_perftest_server_run_latency_base(uint64_t umqh, umq_perftest_latency_arg_t *lat_arg)
+{
+    if (lat_arg->cfg->config.interrupt) {
+        umq_perftest_server_run_latency_base_interrupt(umqh, lat_arg);
+    } else {
+        umq_perftest_server_run_latency_base_polling(umqh, lat_arg);
+    }
+}
+
+static void umq_perftest_client_run_latency_base_interrupt(uint64_t umqh, umq_perftest_latency_arg_t *lat_arg)
 {
     uint64_t start_cycle = 0;
     uint64_t end_cycle = 0;
-    g_perftest_latency_ctx.cycles = (uint64_t *)malloc(sizeof(uint64_t) * DEFAULT_LAT_TEST_ROUND);
+    uint32_t test_round = lat_arg->cfg->test_round;
+    g_perftest_latency_ctx.cycles = (uint64_t *)malloc(sizeof(uint64_t) * test_round);
     if (g_perftest_latency_ctx.cycles == NULL) {
         LOG_PRINT("alloc cycles failed\n");
         return;
@@ -79,28 +166,51 @@ static void umq_perftest_client_run_latency_base(uint64_t umqh, umq_perftest_lat
 
     umq_buf_t *polled_buf;
     umq_buf_t *bad_buf = NULL;
-    while (g_perftest_latency_ctx.iters < DEFAULT_LAT_TEST_ROUND && !perftest_get_status()) {
-        umq_buf_t *req_buf = umq_buf_alloc(lat_arg->cfg->config.size, 1, UMQ_INVALID_HANDLE, NULL);
+    umq_interrupt_option_t interrupt_option = {
+        .flag = UMQ_INTERRUPT_FLAG_IO_DIRECTION,
+        .direction = UMQ_IO_RX,
+    };
+    uint32_t size = lat_arg->cfg->config.size;
+    if (umq_rearm_interrupt(umqh, false, &interrupt_option) != 0) {
+        LOG_PRINT("umq_rearm_interrupt failed\n");
+        goto FINISH;
+    }
+    while (g_perftest_latency_ctx.iters < test_round && !is_perftest_force_quit()) {
+        umq_buf_t *req_buf = umq_buf_alloc(size, 1, umqh, NULL);
         if (req_buf == NULL) {
             LOG_PRINT("alloc buf failed\n");
             goto FINISH;
         }
 
-        // 发送请求
+        // send req
         start_cycle = get_cycles();
-        if (umq_enqueue(umqh, req_buf, &bad_buf) != UMQ_SUCCESS) {
+        int ret = umq_enqueue(umqh, req_buf, &bad_buf);
+        if (ret == -EAGAIN) {
+            continue;
+        }
+        if (ret != UMQ_SUCCESS) {
+            umq_buf_free(bad_buf);
             bad_buf = NULL;
             LOG_PRINT("umq_enqueue failed\n");
             goto FINISH;
         }
+        umq_notify(umqh);
 
-        // 接收返回
-        do {
-            polled_buf = umq_dequeue(umqh);
-        } while (polled_buf == NULL);
+        // recv return
+        int32_t wakeup_num = umq_wait_interrupt(umqh, INTERRUPT_MAX_WAIT_TIME_MS, &interrupt_option);
+        if (wakeup_num < 1) {
+            LOG_PRINT("umq_wait_interrupt failed\n");
+            goto FINISH;
+        }
+        polled_buf = umq_dequeue(umqh);
+        end_cycle = get_cycles();
+        umq_ack_interrupt(umqh, (uint32_t)wakeup_num, &interrupt_option);
+        if (umq_rearm_interrupt(umqh, false, &interrupt_option) != 0) {
+            LOG_PRINT("umq_rearm_interrupt failed\n");
+            goto FINISH;
+        }
 
         umq_buf_free(polled_buf);
-        end_cycle = get_cycles();
         g_perftest_latency_ctx.cycles[g_perftest_latency_ctx.iters++] = end_cycle - start_cycle;
     }
 
@@ -109,71 +219,124 @@ FINISH:
     perftest_force_quit();
 }
 
-static void umq_perftest_server_run_latency_pro(uint64_t umqh, umq_perftest_latency_arg_t *lat_arg)
+static void umq_perftest_client_run_latency_base_polling(uint64_t umqh, umq_perftest_latency_arg_t *lat_arg)
 {
-    // 准备返回数据
-    umq_buf_t *resp_buf = umq_buf_alloc(lat_arg->cfg->config.size, 1, UMQ_INVALID_HANDLE, NULL);
+    uint64_t start_cycle = 0;
+    uint64_t end_cycle = 0;
+    g_perftest_latency_ctx.cycles = (uint64_t *)malloc(sizeof(uint64_t) * lat_arg->cfg->test_round);
+    if (g_perftest_latency_ctx.cycles == NULL) {
+        LOG_PRINT("alloc cycles failed\n");
+        return;
+    }
+
+    umq_buf_t *polled_buf = NULL;
+    umq_buf_t *bad_buf = NULL;
+    uint32_t size = lat_arg->cfg->config.size;
+    bool buf_multiplex = lat_arg->cfg->config.buf_multiplex;
+    umq_buf_t *req_buf = umq_buf_alloc(size, 1, umqh, NULL);
+    if (req_buf == NULL) {
+        LOG_PRINT("alloc buf failed\n");
+        return;
+    }
+
+    while (g_perftest_latency_ctx.iters < lat_arg->cfg->test_round && !is_perftest_force_quit()) {
+        // send req
+        start_cycle = get_cycles();
+        if (umq_enqueue(umqh, req_buf, &bad_buf) != UMQ_SUCCESS) {
+            umq_buf_free(bad_buf);
+            bad_buf = NULL;
+            LOG_PRINT("umq_enqueue failed\n");
+            goto FINISH;
+        }
+
+        // recv return
+        do {
+            polled_buf = umq_dequeue(umqh);
+        } while (polled_buf == NULL && !is_perftest_force_quit());
+        if (buf_multiplex) {
+            req_buf = polled_buf;
+        } else {
+            umq_buf_free(polled_buf);
+            req_buf = umq_buf_alloc(size, 1, umqh, NULL);
+            if (req_buf == NULL) {
+                LOG_PRINT("alloc buf failed\n");
+                goto FINISH;
+            }
+        }
+        end_cycle = get_cycles();
+        g_perftest_latency_ctx.cycles[g_perftest_latency_ctx.iters++] = end_cycle - start_cycle;
+    }
+    if (buf_multiplex) {
+        umq_buf_free(req_buf);
+    }
+FINISH:
+    umq_perftest_client_run_latency_finish(lat_arg);
+    perftest_force_quit();
+}
+
+static void umq_perftest_client_run_latency_base(uint64_t umqh, umq_perftest_latency_arg_t *lat_arg)
+{
+    if (lat_arg->cfg->config.interrupt) {
+        umq_perftest_client_run_latency_base_interrupt(umqh, lat_arg);
+    } else {
+        umq_perftest_client_run_latency_base_polling(umqh, lat_arg);
+    }
+}
+
+static void umq_perftest_server_run_latency_pro_polling(uint64_t umqh, umq_perftest_latency_arg_t *lat_arg)
+{
+    // perpare to return data
+    uint32_t size = lat_arg->cfg->config.size;
+    umq_buf_t *resp_buf = umq_buf_alloc(size, 1, umqh, NULL);
     if (resp_buf == NULL) {
         LOG_PRINT("alloc buf failed\n");
         return;
     }
 
     umq_buf_t *tmp = resp_buf;
-    while (tmp) {
-        umq_buf_pro_t *pro = (umq_buf_pro_t *)tmp->qbuf_ext;
-        pro->flag.bs.solicited_enable = 1;
-        pro->flag.bs.complete_enable = 1;
-        pro->opcode = UMQ_OPC_SEND;
-        tmp = tmp->qbuf_next;
-    }
-
+    set_pro_data(tmp, lat_arg);
     umq_buf_t *polled_buf[UMQ_BATCH_SIZE];
     umq_buf_t *bad_buf = NULL;
-    uint32_t require_rx_cnt = 0;
     uint32_t send_cnt = 0;
     uint32_t recv_cnt = 0;
-    while (g_perftest_latency_ctx.iters < DEFAULT_LAT_TEST_ROUND && !perftest_get_status()) {
+    bool buf_multiplex = lat_arg->cfg->config.buf_multiplex;
+    umq_buf_t *rx_buf = NULL;
+    while (g_perftest_latency_ctx.iters < lat_arg->cfg->test_round && !is_perftest_force_quit()) {
         recv_cnt = 0;
 
-        // 接收请求，并释放rx
+        // recv req, release rx
         do {
-            int ret = umq_poll(umqh, UMQ_IO_RX, polled_buf, 1);
+            int ret = umq_poll(umqh, UMQ_IO_RX, &rx_buf, 1);
             if (ret < 0) {
                 LOG_PRINT("poll rx failed\n");
                 goto FINISH;
             }
 
             recv_cnt += (uint32_t)ret;
-            require_rx_cnt += (uint32_t)ret;
-            for (int i = 0; i < ret; ++i) {
-                umq_buf_free(polled_buf[i]);
-            }
-        } while (recv_cnt < 1);
+        } while (recv_cnt < 1 && !is_perftest_force_quit());
 
-        // 发送返回
+        if (!buf_multiplex) {
+            umq_buf_free(rx_buf);
+            rx_buf = umq_buf_alloc(size, 1, umqh, NULL);
+            if (rx_buf == NULL) {
+                LOG_PRINT("alloc buf failed\n");
+                goto FINISH;
+            }
+        }
+
+        // fill rx
+        if (umq_post(umqh, rx_buf, UMQ_IO_RX, &bad_buf) != UMQ_SUCCESS) {
+            LOG_PRINT("post rx failed\n");
+            goto FINISH;
+        }
+
+        // send return
         if (umq_post(umqh, resp_buf, UMQ_IO_TX, &bad_buf) != UMQ_SUCCESS) {
             LOG_PRINT("post tx failed\n");
             goto FINISH;
         }
 
-        // 填充rx
-        if (require_rx_cnt >= UMQ_BATCH_SIZE) {
-            umq_buf_t *rx_buf = umq_buf_alloc(lat_arg->cfg->config.size, UMQ_BATCH_SIZE, UMQ_INVALID_HANDLE, NULL);
-            if (rx_buf == NULL) {
-                LOG_PRINT("alloc buf failed\n");
-                goto FINISH;
-            }
-
-            if (umq_post(umqh, rx_buf, UMQ_IO_RX, &bad_buf) != UMQ_SUCCESS) {
-                LOG_PRINT("post rx failed\n");
-                umq_buf_free(bad_buf);
-                bad_buf = NULL;
-                goto FINISH;
-            }
-            require_rx_cnt -= UMQ_BATCH_SIZE;
-        }
-
-        // poll返回的tx cqe。tx buffer复用，无需释放
+        // poll tx cqe. tx buffer reuse, no release
         send_cnt = 0;
         do {
             int ret = umq_poll(umqh, UMQ_IO_TX, polled_buf, 1);
@@ -183,27 +346,140 @@ static void umq_perftest_server_run_latency_pro(uint64_t umqh, umq_perftest_late
             }
 
             send_cnt += (uint32_t)ret;
-        } while (send_cnt != 1);
+        } while (send_cnt != 1 && !is_perftest_force_quit());
 
         g_perftest_latency_ctx.iters++;
     }
 
 FINISH:
     umq_buf_free(resp_buf);
+    umq_buf_free(rx_buf);
+    umq_buf_free(bad_buf);
     perftest_force_quit();
 }
 
-static void umq_perftest_client_run_latency_pro(uint64_t umqh, umq_perftest_latency_arg_t *lat_arg)
+static void umq_perftest_server_run_latency_pro_interrupt(uint64_t umqh, umq_perftest_latency_arg_t *lat_arg)
+{
+    // perpare to return data
+    uint32_t size = lat_arg->cfg->config.size;
+    umq_buf_t *resp_buf = umq_buf_alloc(size, 1, umqh, NULL);
+    if (resp_buf == NULL) {
+        LOG_PRINT("alloc buf failed\n");
+        return;
+    }
+
+    umq_buf_t *tmp = resp_buf;
+    set_pro_data(tmp, lat_arg);
+
+    umq_buf_t *polled_buf = NULL;
+    umq_buf_t *bad_buf = NULL;
+    bool buf_multiplex = lat_arg->cfg->config.buf_multiplex;
+    uint32_t test_round = lat_arg->cfg->test_round;
+    umq_interrupt_option_t interrupt_option = {
+        .flag = UMQ_INTERRUPT_FLAG_IO_DIRECTION,
+        .direction = UMQ_IO_RX,
+    };
+    umq_interrupt_option_t tx_interrupt_option = {
+        .flag = UMQ_INTERRUPT_FLAG_IO_DIRECTION,
+        .direction = UMQ_IO_TX,
+    };
+    if (umq_rearm_interrupt(umqh, false, &interrupt_option) != 0) {
+        LOG_PRINT("umq_rearm_interrupt failed\n");
+        goto FINISH;
+    }
+    if (umq_rearm_interrupt(umqh, false, &tx_interrupt_option) != 0) {
+        LOG_PRINT("umq_rearm_interrupt failed\n");
+        goto FINISH;
+    }
+    umq_buf_t *rx_buf = NULL;
+    while (g_perftest_latency_ctx.iters < test_round && !is_perftest_force_quit()) {
+        // recv req, release rx
+        int32_t nevents = umq_wait_interrupt(umqh, INTERRUPT_MAX_WAIT_TIME_MS, &interrupt_option);
+        if (nevents < 1) {
+            LOG_PRINT("umq_wait_interrupt failed\n");
+            goto FINISH;
+        }
+
+        int ret = umq_poll(umqh, UMQ_IO_RX, &rx_buf, 1);
+        if (ret < 0) {
+            goto FINISH;
+        }
+        umq_ack_interrupt(umqh, (uint32_t)nevents, &interrupt_option);
+
+        if (!buf_multiplex) {
+            umq_buf_free(rx_buf);
+            rx_buf = umq_buf_alloc(size, 1, umqh, NULL);
+            if (rx_buf == NULL) {
+                LOG_PRINT("alloc buf failed\n");
+                goto FINISH;
+            }
+        }
+
+        // fill rx
+        if (umq_post(umqh, rx_buf, UMQ_IO_RX, &bad_buf) != UMQ_SUCCESS) {
+            LOG_PRINT("post rx failed\n");
+            goto FINISH;
+        }
+
+        // send return
+        if (umq_post(umqh, resp_buf, UMQ_IO_TX, &bad_buf) != UMQ_SUCCESS) {
+            LOG_PRINT("post tx failed\n");
+            goto FINISH;
+        }
+        if (umq_rearm_interrupt(umqh, false, &interrupt_option) != 0) {
+            LOG_PRINT("umq_rearm_interrupt failed\n");
+            goto FINISH;
+        }
+        umq_notify(umqh);
+
+        nevents = umq_wait_interrupt(umqh, INTERRUPT_MAX_WAIT_TIME_MS, &tx_interrupt_option);
+        if (nevents < 1) {
+            LOG_PRINT("umq_wait_interrupt failed\n");
+            goto FINISH;
+        }
+        // poll tx cqe. tx buffer reuse, no release
+        ret = umq_poll(umqh, UMQ_IO_TX, &polled_buf, 1);
+        if (ret < 0) {
+            LOG_PRINT("umq_poll failed\n");
+            goto FINISH;
+        }
+        umq_ack_interrupt(umqh, (uint32_t)nevents, &tx_interrupt_option);
+        if (umq_rearm_interrupt(umqh, false, &tx_interrupt_option) != 0) {
+            LOG_PRINT("umq_rearm_interrupt failed\n");
+            goto FINISH;
+        }
+
+        g_perftest_latency_ctx.iters++;
+    }
+
+FINISH:
+    umq_buf_free(rx_buf);
+    umq_buf_free(resp_buf);
+    umq_buf_free(bad_buf);
+    perftest_force_quit();
+}
+
+static void umq_perftest_server_run_latency_pro(uint64_t umqh, umq_perftest_latency_arg_t *lat_arg)
+{
+    if (lat_arg->cfg->config.interrupt) {
+        umq_perftest_server_run_latency_pro_interrupt(umqh, lat_arg);
+    } else {
+        umq_perftest_server_run_latency_pro_polling(umqh, lat_arg);
+    }
+}
+
+static void umq_perftest_client_run_latency_pro_polling(uint64_t umqh, umq_perftest_latency_arg_t *lat_arg)
 {
     uint64_t start_cycle = 0;
-    g_perftest_latency_ctx.cycles = (uint64_t *)malloc(sizeof(uint64_t) * DEFAULT_LAT_TEST_ROUND);
+    uint32_t size = lat_arg->cfg->config.size;
+    g_perftest_latency_ctx.cycles = (uint64_t *)malloc(sizeof(uint64_t) * lat_arg->cfg->test_round);
     if (g_perftest_latency_ctx.cycles == NULL) {
         LOG_PRINT("alloc cycles failed\n");
         return;
     }
 
-    // 准备请求数据。请求的tx buffer复用
-    umq_buf_t *req_buf = umq_buf_alloc(lat_arg->cfg->config.size, 1, UMQ_INVALID_HANDLE, NULL);
+    // preparing req data. tx buffer reuse
+    umq_buf_t *req_buf = umq_buf_alloc(size, 1, umqh, NULL);
     if (req_buf == NULL) {
         free(g_perftest_latency_ctx.cycles);
         LOG_PRINT("alloc buf failed\n");
@@ -211,45 +487,23 @@ static void umq_perftest_client_run_latency_pro(uint64_t umqh, umq_perftest_late
     }
 
     umq_buf_t *tmp = req_buf;
-    while (tmp) {
-        umq_buf_pro_t *pro = (umq_buf_pro_t *)tmp->qbuf_ext;
-        pro->flag.bs.solicited_enable = 1;
-        pro->flag.bs.complete_enable = 1;
-        pro->opcode = UMQ_OPC_SEND;
-        tmp = tmp->qbuf_next;
-    }
-
+    set_pro_data(tmp, lat_arg);
     umq_buf_t *polled_buf[UMQ_BATCH_SIZE];
     umq_buf_t *bad_buf = NULL;
-    uint32_t require_rx_cnt = 0;
     uint32_t send_cnt = 0;
     uint32_t recv_cnt = 0;
-    while (g_perftest_latency_ctx.iters < DEFAULT_LAT_TEST_ROUND && !perftest_get_status()) {
+    bool buf_multiplex = lat_arg->cfg->config.buf_multiplex;
+    umq_buf_t *rx_buf = NULL;
+    while (g_perftest_latency_ctx.iters < lat_arg->cfg->test_round && !is_perftest_force_quit()) {
         send_cnt = 0;
-        // 发送请求
+        // send req
         start_cycle = get_cycles();
         if (umq_post(umqh, req_buf, UMQ_IO_TX, &bad_buf) != UMQ_SUCCESS) {
             LOG_PRINT("post tx failed\n");
             goto FINISH;
         }
 
-        // 填充rx
-        if (require_rx_cnt >= UMQ_BATCH_SIZE) {
-            umq_buf_t *rx_buf = umq_buf_alloc(lat_arg->cfg->config.size, UMQ_BATCH_SIZE, UMQ_INVALID_HANDLE, NULL);
-            if (rx_buf == NULL) {
-                LOG_PRINT("alloc buf failed\n");
-                goto FINISH;
-            }
-
-            if (umq_post(umqh, rx_buf, UMQ_IO_RX, &bad_buf) != UMQ_SUCCESS) {
-                LOG_PRINT("post rx failed\n");
-                umq_buf_free(bad_buf);
-                goto FINISH;
-            }
-            require_rx_cnt -= UMQ_BATCH_SIZE;
-        }
-
-        // poll返回的tx cqe。 tx buffer复用，无需释放
+        // poll tx cqe. tx buffer reuse, no release
         do {
             int ret = umq_poll(umqh, UMQ_IO_TX, polled_buf, 1);
             if (ret < 0) {
@@ -258,23 +512,145 @@ static void umq_perftest_client_run_latency_pro(uint64_t umqh, umq_perftest_late
             }
 
             send_cnt += (uint32_t)ret;
-        } while (send_cnt != 1);
+        } while (send_cnt != 1 && !is_perftest_force_quit());
 
-        // 接收返回，并释放rx
+        // recv return, release rx
         recv_cnt = 0;
         do {
-            int ret = umq_poll(umqh, UMQ_IO_RX, polled_buf, 1);
+            int ret = umq_poll(umqh, UMQ_IO_RX, &rx_buf, 1);
             if (ret < 0) {
                 LOG_PRINT("poll rx failed\n");
                 goto FINISH;
             }
 
             recv_cnt += (uint32_t)ret;
-            require_rx_cnt += (uint32_t)ret;
-            for (int i = 0; i < ret; ++i) {
-                umq_buf_free(polled_buf[i]);
+        } while (recv_cnt < 1 && !is_perftest_force_quit());
+
+        if (!buf_multiplex) {
+            umq_buf_free(rx_buf);
+            rx_buf = umq_buf_alloc(size, 1, umqh, NULL);
+            if (rx_buf == NULL) {
+                LOG_PRINT("alloc buf failed\n");
+                goto FINISH;
             }
-        } while (recv_cnt < 1);
+        }
+
+        // fill rx
+        if (umq_post(umqh, rx_buf, UMQ_IO_RX, &bad_buf) != UMQ_SUCCESS) {
+            LOG_PRINT("post rx failed\n");
+            goto FINISH;
+        }
+
+        g_perftest_latency_ctx.cycles[g_perftest_latency_ctx.iters++] = get_cycles() - start_cycle;
+    }
+
+FINISH:
+    umq_perftest_client_run_latency_finish(lat_arg);
+    umq_buf_free(rx_buf);
+    umq_buf_free(req_buf);
+    umq_buf_free(bad_buf);
+    perftest_force_quit();
+}
+
+static void umq_perftest_client_run_latency_pro_interrupt(uint64_t umqh, umq_perftest_latency_arg_t *lat_arg)
+{
+    uint64_t start_cycle = 0;
+    uint32_t test_round = lat_arg->cfg->test_round;
+    g_perftest_latency_ctx.cycles = (uint64_t *)malloc(sizeof(uint64_t) * test_round);
+    if (g_perftest_latency_ctx.cycles == NULL) {
+        LOG_PRINT("alloc cycles failed\n");
+        return;
+    }
+
+    // preparing req data. tx buffer reuse
+    uint32_t size = lat_arg->cfg->config.size;
+    umq_buf_t *req_buf = umq_buf_alloc(size, 1, umqh, NULL);
+    if (req_buf == NULL) {
+        free(g_perftest_latency_ctx.cycles);
+        LOG_PRINT("alloc buf failed\n");
+        return;
+    }
+
+    umq_buf_t *tmp = req_buf;
+    set_pro_data(tmp, lat_arg);
+
+    umq_buf_t *polled_buf = NULL;
+    umq_buf_t *bad_buf = NULL;
+    umq_buf_t *rx_buf = NULL;
+    bool buf_multiplex = lat_arg->cfg->config.buf_multiplex;
+    umq_interrupt_option_t interrupt_option = {
+        .flag = UMQ_INTERRUPT_FLAG_IO_DIRECTION,
+        .direction = UMQ_IO_RX,
+    };
+    umq_interrupt_option_t tx_interrupt_option = {
+        .flag = UMQ_INTERRUPT_FLAG_IO_DIRECTION,
+        .direction = UMQ_IO_TX,
+    };
+    if (umq_rearm_interrupt(umqh, false, &interrupt_option) != 0) {
+        LOG_PRINT("umq_rearm_interrupt failed\n");
+        goto FINISH;
+    }
+    if (umq_rearm_interrupt(umqh, false, &tx_interrupt_option) != 0) {
+        LOG_PRINT("umq_rearm_interrupt failed\n");
+        goto FINISH;
+    }
+    while (g_perftest_latency_ctx.iters < test_round && !is_perftest_force_quit()) {
+        // send req
+        start_cycle = get_cycles();
+        if (umq_post(umqh, req_buf, UMQ_IO_TX, &bad_buf) != UMQ_SUCCESS) {
+            LOG_PRINT("post tx failed\n");
+            goto FINISH;
+        }
+        umq_notify(umqh);
+
+        // poll tx cqe. tx buffer reuse, no release
+        int32_t nevents = umq_wait_interrupt(umqh, INTERRUPT_MAX_WAIT_TIME_MS, &tx_interrupt_option);
+        if (nevents < 1) {
+            LOG_PRINT("umq_wait_interrupt failed\n");
+            goto FINISH;
+        }
+        int ret = umq_poll(umqh, UMQ_IO_TX, &polled_buf, 1);
+        if (ret < 0) {
+            LOG_PRINT("poll tx failed\n");
+            goto FINISH;
+        }
+        umq_ack_interrupt(umqh, (uint32_t)nevents, &tx_interrupt_option);
+        if (umq_rearm_interrupt(umqh, false, &tx_interrupt_option) != 0) {
+            LOG_PRINT("umq_rearm_interrupt failed\n");
+            goto FINISH;
+        }
+
+        // recv return, release rx
+        int32_t wakeup_num = umq_wait_interrupt(umqh, INTERRUPT_MAX_WAIT_TIME_MS, &interrupt_option);
+        if (wakeup_num < 1) {
+            LOG_PRINT("umq_wait_interrupt failed\n");
+            goto FINISH;
+        }
+        ret = umq_poll(umqh, UMQ_IO_RX, &rx_buf, 1);
+        if (ret < 0) {
+            LOG_PRINT("poll rx failed\n");
+            goto FINISH;
+        }
+        umq_ack_interrupt(umqh, (uint32_t)wakeup_num, &interrupt_option);
+        if (umq_rearm_interrupt(umqh, false, &interrupt_option) != 0) {
+            LOG_PRINT("umq_rearm_interrupt failed\n");
+            goto FINISH;
+        }
+
+        if (!buf_multiplex) {
+            umq_buf_free(rx_buf);
+            rx_buf = umq_buf_alloc(size, 1, umqh, NULL);
+            if (rx_buf == NULL) {
+                LOG_PRINT("alloc buf failed\n");
+                goto FINISH;
+            }
+        }
+
+        // fill rx
+        if (umq_post(umqh, rx_buf, UMQ_IO_RX, &bad_buf) != UMQ_SUCCESS) {
+            LOG_PRINT("post rx failed\n");
+            goto FINISH;
+        }
 
         g_perftest_latency_ctx.cycles[g_perftest_latency_ctx.iters++] = get_cycles() - start_cycle;
     }
@@ -282,7 +658,18 @@ static void umq_perftest_client_run_latency_pro(uint64_t umqh, umq_perftest_late
 FINISH:
     umq_perftest_client_run_latency_finish(lat_arg);
     umq_buf_free(req_buf);
+    umq_buf_free(rx_buf);
+    umq_buf_free(bad_buf);
     perftest_force_quit();
+}
+
+static void umq_perftest_client_run_latency_pro(uint64_t umqh, umq_perftest_latency_arg_t *lat_arg)
+{
+    if (lat_arg->cfg->config.interrupt) {
+        umq_perftest_client_run_latency_pro_interrupt(umqh, lat_arg);
+    } else {
+        umq_perftest_client_run_latency_pro_polling(umqh, lat_arg);
+    }
 }
 
 void umq_perftest_run_latency(uint64_t umqh, umq_perftest_latency_arg_t *lat_arg)

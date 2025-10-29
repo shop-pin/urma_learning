@@ -64,7 +64,7 @@ void perftest_force_quit(void)
     g_urpc_perftest_ctx.force_quit = true;
 }
 
-bool perftest_get_status(void)
+bool is_perftest_force_quit(void)
 {
     return g_urpc_perftest_ctx.force_quit;
 }

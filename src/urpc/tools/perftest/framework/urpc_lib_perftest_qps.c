@@ -276,7 +276,7 @@ void urpc_perftest_print_qps(perftest_framework_config_t *cfg)
     uint64_t begin = get_cycles();
 
     urpc_perftest_print_qps_title(cfg);
-    while (!perftest_get_status()) {
+    while (!is_perftest_force_quit()) {
         (void)sleep(1);
 
         urpc_perftest_reqs_get(reqs, PERFTEST_THREAD_MAX_NUM, cfg->thread_num);

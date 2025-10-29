@@ -50,7 +50,7 @@ void perftest_force_quit(void)
     g_umq_perftest_ctx.force_quit = true;
 }
 
-bool perftest_get_status(void)
+bool is_perftest_force_quit(void)
 {
     return g_umq_perftest_ctx.force_quit;
 }
@@ -91,6 +91,7 @@ static int umq_perftest_init_umq(umq_perftest_config_t *cfg)
     umq_config->trans_info[0].trans_mode = (umq_trans_mode_t)cfg->trans_mode;
     umq_config->cna = cfg->cna;
     umq_config->ubmm_eid = cfg->deid;
+    umq_config->eid_idx = cfg->eid_idx;
     if (fill_dev_info(&umq_config->trans_info[0].dev_info, cfg) != 0) {
         free(umq_config);
         return -1;
@@ -105,26 +106,33 @@ static int umq_perftest_init_umq(umq_perftest_config_t *cfg)
     return 0;
 }
 
-static uint64_t umq_perftest_create_umqh(umq_perftest_config_t *cfg)
+static int umq_perftest_create_umqh(umq_perftest_config_t *cfg)
 {
     umq_create_option_t option = {
         .trans_mode = (umq_trans_mode_t)cfg->trans_mode,
-        .create_flag = UMQ_CREATE_FLAG_IS_LOCAL_IPC | UMQ_CREATE_FLAG_RX_BUF_SIZE |
-            UMQ_CREATE_FLAG_TX_BUF_SIZE | UMQ_CREATE_FLAG_RX_DEPTH | UMQ_CREATE_FLAG_TX_DEPTH,
+        .create_flag = UMQ_CREATE_FLAG_RX_BUF_SIZE | UMQ_CREATE_FLAG_TX_BUF_SIZE |
+            UMQ_CREATE_FLAG_RX_DEPTH | UMQ_CREATE_FLAG_TX_DEPTH | UMQ_CREATE_FLAG_QUEUE_MODE,
         .rx_buf_size = cfg->config.size,
         .tx_buf_size = cfg->config.size,
         .rx_depth = cfg->config.rx_depth,
         .tx_depth = cfg->config.tx_depth,
         .mode = cfg->config.interrupt ? UMQ_MODE_INTERRUPT : UMQ_MODE_POLLING,
-        .is_local_ipc = cfg->local_ipc,
     };
-    (void)sprintf(option.name, "%s", "umq_perftest");
+    char *name = cfg->config.instance_mode == PERF_INSTANCE_SERVER ? "umq_perftest_server" : "umq_perftest_client";
+    (void)sprintf(option.name, "%s", name);
     if (fill_dev_info(&option.dev_info, cfg) != 0) {
         LOG_PRINT("dev info copy failed\n");
-        return UMQ_INVALID_HANDLE;
+        return -1;
     }
 
-    return umq_create(&option);
+    uint64_t umqh = umq_create(&option);
+    if (umqh == UMQ_INVALID_HANDLE) {
+        LOG_PRINT("umq_create failed\n");
+        return -1;
+    }
+    g_umq_perftest_ctx.umqh = umqh;
+
+    return 0;
 }
 
 static int umq_perftest_post_rx(umq_perftest_config_t *cfg)
@@ -133,7 +141,7 @@ static int umq_perftest_post_rx(umq_perftest_config_t *cfg)
         return 0;
     }
 
-    // pro模式，需要申请并post rx
+    // pro mode，need alloc rx buf
     uint32_t require_rx_count = cfg->config.rx_depth;
     uint32_t cur_batch_count = 0;
     umq_buf_t *bad_buf = NULL;
@@ -256,24 +264,23 @@ static int umq_perftest_run_client(umq_perftest_config_t *cfg)
 {
     int ret = -1;
 
-    // 初始化
+    // init
     if (umq_perftest_init_umq(cfg) != 0) {
         return -1;
     }
 
-    // 创建umqh
-    g_umq_perftest_ctx.umqh = umq_perftest_create_umqh(cfg);
-    if (g_umq_perftest_ctx.umqh == 0) {
+    // create umqh
+    if (umq_perftest_create_umqh(cfg) != 0) {
         goto UNINIT;
     }
 
-    // 创建socket，用于交换信息和进行同步，并和server建链
+    // create socket for exchange info and sync，and attach server
     g_umq_perftest_ctx.fd = perftest_create_client_socket(&cfg->config);
     if (g_umq_perftest_ctx.fd < 0) {
         goto DESTROY;
     }
 
-    // 获取并交换bind信息，完成bind
+    // exchange bind info and bind
     ret = umq_perftest_client_exchange_data();
     if (ret != 0) {
         goto CLOSE_SOC;
@@ -285,22 +292,22 @@ static int umq_perftest_run_client(umq_perftest_config_t *cfg)
         goto UNBIND;
     }
 
-    // 进行同步
+    // sync
     ret = perftest_client_sync(g_umq_perftest_ctx.fd);
     if (ret != 0) {
         goto UNBIND;
     }
 
-    // 运行测试流程
+    // run test
     ret = umq_perftest_start_test_threads(cfg);
     if (ret != 0) {
         goto UNBIND;
     }
 
-    // 等待测试完成
+    // wait test complete
     umq_perftest_wait(&cfg->config);
 
-    // 停止测试线程
+    // stop test threads
     umq_perftest_stop_test_threads(&cfg->config);
 
 UNBIND:
@@ -308,11 +315,11 @@ UNBIND:
     (void)umq_unbind(g_umq_perftest_ctx.umqh);
 
 CLOSE_SOC:
-    // 销毁socket
+    // destroy socket
     (void)close(g_umq_perftest_ctx.fd);
 
 DESTROY:
-    // 销毁umqh
+    // destroy umqh
     (void)umq_destroy(g_umq_perftest_ctx.umqh);
 
 UNINIT:
@@ -324,7 +331,9 @@ UNINIT:
 
 static int umq_perftest_server_exchange_and_bind(umq_perftest_config_t *cfg)
 {
-    // 服务端先接收client端的bind信息，然后进行绑定，然后发送本端bind信息
+    /* 1. serevr recv client bind info
+     * 2. bind client
+     * 3. send bind info to client */
     exchange_info_t remote_info = {0};
     if (recv_exchange_data(g_umq_perftest_ctx.accept_fd, &remote_info) != 0) {
         return -1;
@@ -354,18 +363,17 @@ static int umq_perftest_server_exchange_and_bind(umq_perftest_config_t *cfg)
 static int umq_perftest_run_server(umq_perftest_config_t *cfg)
 {
     int ret = -1;
-    // 初始化
+    // init
     if (umq_perftest_init_umq(cfg) != 0) {
         return ret;
     }
 
-    // 创建umqh
-    g_umq_perftest_ctx.umqh = umq_perftest_create_umqh(cfg);
-    if (g_umq_perftest_ctx.umqh == 0) {
+    // create umqh
+    if (umq_perftest_create_umqh(cfg) != 0) {
         goto UNINIT;
     }
 
-    // 创建socket，用于交换信息和进行同步
+    // create socket for exchange attach info and sync
     g_umq_perftest_ctx.fd = perftest_create_server_socket(&cfg->config);
     if (g_umq_perftest_ctx.fd < 0) {
         goto DESTROY;
@@ -377,34 +385,34 @@ static int umq_perftest_run_server(umq_perftest_config_t *cfg)
         goto CLOSE_FD;
     }
 
-    // 获取并交换bind信息，完成bind
+    // exchange bind info and bind
     ret = umq_perftest_server_exchange_and_bind(cfg);
     if (ret != 0) {
         goto CLOSE_ACCEPT_FD;
     }
 
-    // 填充rx
+    // fill rx
     ret = umq_perftest_post_rx(cfg);
     if (ret != 0) {
         goto UNBIND;
     }
 
-    // 填充完rx之后，客户端和服务端进行同步
+    // sync between client and server after fill rx
     ret = perftest_server_sync(g_umq_perftest_ctx.accept_fd);
     if (ret != 0) {
         goto UNBIND;
     }
 
-    // 运行测试流程
+    // run test
     ret = umq_perftest_start_test_threads(cfg);
     if (ret != 0) {
         goto UNBIND;
     }
 
-    // 等待测试完成
+    // wait test complete
     umq_perftest_wait(&cfg->config);
 
-    // 停止测试线程
+    // stop test threads
     umq_perftest_stop_test_threads(&cfg->config);
 
 UNBIND:
@@ -412,13 +420,13 @@ UNBIND:
     (void)umq_unbind(g_umq_perftest_ctx.umqh);
 
 CLOSE_ACCEPT_FD:
-    // 销毁socket
+    // destroy socket
     (void)close(g_umq_perftest_ctx.accept_fd);
 CLOSE_FD:
     (void)close(g_umq_perftest_ctx.fd);
 
 DESTROY:
-    // 销毁umqh
+    // destroy umqh
     (void)umq_destroy(g_umq_perftest_ctx.umqh);
 
 UNINIT:
@@ -433,6 +441,15 @@ int main(int argc, char *argv[])
     init_signal_handler();
 
     if (umq_perftest_parse_arguments(argc, argv, &g_umq_perftest_ctx.cfg) != 0) {
+        return -1;
+    }
+
+    // only UB/UB_PLUS/IB/IB_PLUS support pro feature
+    uint32_t trans_mode = g_umq_perftest_ctx.cfg.trans_mode;
+    if ((g_umq_perftest_ctx.cfg.feature & UMQ_FEATURE_API_PRO) &&
+        trans_mode != UMQ_TRANS_MODE_UB && trans_mode != UMQ_TRANS_MODE_IB &&
+        trans_mode != UMQ_TRANS_MODE_UB_PLUS && trans_mode != UMQ_TRANS_MODE_IB_PLUS) {
+        LOG_PRINT("trans_mode: %u doesn't support pro feature\n", trans_mode);
         return -1;
     }
 

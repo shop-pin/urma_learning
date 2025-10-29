@@ -20,15 +20,20 @@
 extern "C" {
 #endif
 
+#define UMQ_ENABLE_INLINE_LIMIT_SIZE 32
+#define UMQ_INLINE_ENABLE 1
+
 typedef struct umq_perftest_config {
     perftest_config_t config;
 
     uint32_t trans_mode;
     uint32_t feature;
+    uint32_t test_round;
     umq_buf_mode_t buf_mode;
-    bool local_ipc;
     uint16_t cna;
     uint32_t deid;
+    uint16_t eid_idx;
+    bool buf_multiplex;
 } umq_perftest_config_t;
 
 int umq_perftest_parse_arguments(int argc, char **argv, umq_perftest_config_t *cfg);
