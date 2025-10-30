@@ -31,7 +31,6 @@ extern "C" {
 #define UMQ_MAX_QUEUE_NUMBER            8192
 #define UMQ_SIZE_4M                     (0x400000)
 #define SHM_MODE (0660)
-#define UMQ_SIZE_8K                     8192 // 8K size
 #define UMQ_MAX_QUEUE_NUMBER            8192
 
 

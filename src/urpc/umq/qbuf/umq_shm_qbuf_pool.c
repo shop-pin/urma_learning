@@ -147,7 +147,7 @@ static void unregister_all_thread_cache(qbuf_pool_t *pool)
           * on this thread cache), wait until the next thread finish the release operation */
         (void)clock_gettime(CLOCK_MONOTONIC, &start);
         uint32_t desired = ref;
-        while (atomic_compare_exchange_weak_explicit(
+        while (!atomic_compare_exchange_weak_explicit(
             &tls_mgmt_pool->remove_ref_cnt, &desired, 0, memory_order_release, memory_order_acquire)) {
             if (desired != ref) {
                 UMQ_VLOG_ERR("unexpected exception, actual ref: %u, desired ref: %u\n", ref, desired);
@@ -229,6 +229,8 @@ static void umq_shm_global_split_pool_init(shm_qbuf_pool_cfg_t *cfg, qbuf_pool_t
         buf->headroom_size = cfg->headroom_size;
         buf->token_id = 0;
         buf->buf_data = pool->data_buffer + i * blk_size + cfg->headroom_size;
+        buf->mempool_id = 0;
+        buf->need_import = 0;
         (void)memset(buf->qbuf_ext, 0, sizeof(buf->qbuf_ext));
         QBUF_LIST_INSERT_HEAD(&pool->block_pool.head_with_data, buf);
     }
@@ -243,6 +245,8 @@ static void umq_shm_global_split_pool_init(shm_qbuf_pool_cfg_t *cfg, qbuf_pool_t
         head_buf->headroom_size = 0;
         head_buf->token_id = 0;
         head_buf->buf_data = NULL;
+        head_buf->mempool_id = 0;
+        head_buf->need_import = 0;
         (void)memset(head_buf->qbuf_ext, 0, sizeof(head_buf->qbuf_ext));
         QBUF_LIST_INSERT_HEAD(&pool->block_pool.head_without_data, head_buf);
     }
@@ -337,7 +341,7 @@ static ALWAYS_INLINE int umq_shm_dequeue_qbuf(msg_ring_t *msg_ring, uint64_t *of
         msg_ring_poll_rx_batch(msg_ring, (char **)&rx_data_ptr, sizeof(uint64_t), polled_buf_size, max_num);
     if (ret < 0) {
         UMQ_VLOG_ERR("ipc poll rx failed\n");
-        return UMQ_FAIL;
+        return -UMQ_ERR_EAGAIN;
     }
 
     return ret;
@@ -379,7 +383,7 @@ static ALWAYS_INLINE void umq_shm_poll_and_fill_global(qbuf_pool_t *pool)
     uint64_t qbuf_offset[SHM_QBUF_POOL_BATCH_CNT];
     uint32_t max_count = SHM_QBUF_POOL_BATCH_CNT;
     int ret = umq_shm_dequeue_qbuf(pool->msg_ring, qbuf_offset, max_count);
-    if (ret <= 0) {
+    if (ret < 0) {
         UMQ_VLOG_ERR("umq_shm_dequeue_qbuf return: %d\n", ret);
         return;
     }
@@ -419,14 +423,14 @@ int umq_shm_qbuf_alloc(
 
         if (_pool->mode != UMQ_BUF_SPLIT) {
             UMQ_VLOG_ERR("cannot alloc memory size 0 in combine mode\n");
-            return UMQ_FAIL;
+            return -UMQ_ERR_ENOMEM;
         }
 
         // fetch from global first, if thread local qbuf is not enough for allocate operation
         while (lblk_pool->buf_cnt_without_data < num) {
             umq_shm_poll_and_fill_global(_pool);
             if (fetch_from_global(gblk_pool, lblk_pool, false, SHM_QBUF_POOL_BATCH_CNT) <= 0) {
-                return UMQ_FAIL;
+                return -UMQ_ERR_ENOMEM;
             }
         }
 
@@ -443,7 +447,7 @@ int umq_shm_qbuf_alloc(
     uint32_t single_size = request_size + headroom_size + (_pool->mode == UMQ_BUF_COMBINE ? sizeof(umq_buf_t) : 0);
     if (single_size > _pool->block_size) {
         UMQ_VLOG_ERR("request size[%u] too large, support max size: %u\n", request_size, _pool->block_size);
-        return UMQ_FAIL;
+        return -UMQ_ERR_EINVAL;
     }
 
     // fetch from global first, if thread local qbuf is not enough for allocate operation
@@ -452,7 +456,7 @@ int umq_shm_qbuf_alloc(
         if (fetch_from_global(gblk_pool, lblk_pool, true, SHM_QBUF_POOL_BATCH_CNT) <= 0) {
             UMQ_VLOG_ERR("fetch from global failed, current size: %u, alloc num: %u\n",
                 lblk_pool->buf_cnt_with_data, num);
-            return UMQ_FAIL;
+            return -UMQ_ERR_ENOMEM;
         }
     }
 
@@ -628,6 +632,7 @@ int umq_shm_qbuf_enqueue(umq_buf_t *qbuf, uint64_t umq, uint64_t pool, bool rend
     if (qbuf_offset == QBUF_INVALID_OFFSET) {
         return UMQ_FAIL;
     }
+
     if (rendezvous) {
         qbuf_offset |= UMQ_RENDEZVOUS_FLAG;
     }

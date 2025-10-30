@@ -113,7 +113,7 @@ typedef struct umq_trans_info {
 #define UMQ_FEATURE_API_PRO                 (1)         // enable pro feature. set when use umq_post/umq_poll
 #define UMQ_FEATURE_ENABLE_TOKEN_POLICY     (1 << 1)    // enable token policy.
 #define UMQ_FEATURE_ENABLE_STATS            (1 << 2)    // enable stats collection
-#define UMQ_FEATURE_ENABLE_PERF             (1 << 3)    // enable performance collection   
+#define UMQ_FEATURE_ENABLE_PERF             (1 << 3)    // enable performance collection
 
 typedef struct umq_init_cfg {
     umq_buf_mode_t buf_mode;
@@ -178,15 +178,18 @@ struct umq_buf {
     uint16_t headroom_size;               // size of umq buf headroom
     uint16_t rsvd1;
 
-    uint32_t token_id;                    // token_id for reference operation
+    uint32_t token_id : 20;               // token_id for reference operation
+    uint32_t rsvd2 : 4;
+    uint32_t mempool_id : 8;              // indicate which memory pool it is allocated from
     uint32_t token_value;                 // token_value for reference operation
 
     uint64_t status : 32;                 // status of umq buf
     uint64_t io_direction : 2;            // 0: no direction; 1: tx qbuf; 2: rx qbuf
     uint64_t write_flag : 1;
-    uint64_t rsvd2 : 29;
+    uint64_t need_import : 1;
+    uint64_t rsvd3 : 28;
 
-    uint64_t rsvd3;
+    uint64_t rsvd4;
 
     char *buf_data;                       // point to data[0]
 
@@ -248,7 +251,7 @@ typedef enum umq_err_stats_type {
     UMQ_ERR_STATS_TYPE_POLL_RX,                             // poll rx failed
     UMQ_ERR_STATS_TYPE_POLL_IO_DIRECTION_INVALID,           // poll io direcion invalid cnt
 
-    UMQ_ERR_STATS_TYPE_READ,                                // read failed 
+    UMQ_ERR_STATS_TYPE_READ,                                // read failed
     UMQ_ERR_STATS_TYPE_READ_BIND_CTX_INVALID,               // read bind ctx invalid cnt
     UMQ_ERR_STATS_TYPE_READ_TSEG_INVALID,                   // read tseg ctx invalid cnt
 

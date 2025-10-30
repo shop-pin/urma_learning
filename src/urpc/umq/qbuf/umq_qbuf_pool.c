@@ -89,7 +89,7 @@ int umq_qbuf_pool_init(qbuf_pool_cfg_t *cfg)
 {
     if (g_qbuf_pool.inited) {
         UMQ_VLOG_ERR("qbuf pool has already been inited\n");
-        return UMQ_FAIL;
+        return -UMQ_ERR_EEXIST;
     }
 
     (void)pthread_mutex_init(&g_qbuf_pool.block_pool.global_mutex, NULL);
@@ -103,7 +103,7 @@ int umq_qbuf_pool_init(qbuf_pool_cfg_t *cfg)
         QBUF_LIST_INIT(&g_qbuf_pool.block_pool.head_without_data);
         uint32_t blk_size = round_up(cfg->data_size + cfg->headroom_size, UMQ_SIZE_8K);
         uint32_t blk_num = cfg->total_size /
-        ((UMQ_EMPTY_HEADER_COEFFICIENT + 1) * (uint32_t)sizeof(umq_buf_t) + blk_size);
+            ((UMQ_EMPTY_HEADER_COEFFICIENT + 1) * (uint32_t)sizeof(umq_buf_t) + blk_size);
 
         g_qbuf_pool.block_size = blk_size;
         g_qbuf_pool.total_block_num = blk_num;
@@ -120,6 +120,8 @@ int umq_qbuf_pool_init(qbuf_pool_cfg_t *cfg)
             buf->total_data_size = buf->data_size;
             buf->headroom_size = cfg->headroom_size;
             buf->buf_data = g_qbuf_pool.data_buffer + i * blk_size + cfg->headroom_size;
+            buf->mempool_id = 0;
+            buf->need_import = 0;
             (void)memset(buf->qbuf_ext, 0, sizeof(buf->qbuf_ext));
             QBUF_LIST_INSERT_HEAD(&g_qbuf_pool.block_pool.head_with_data, buf);
         }
@@ -133,6 +135,8 @@ int umq_qbuf_pool_init(qbuf_pool_cfg_t *cfg)
             head_buf->total_data_size = 0;
             head_buf->headroom_size = 0;
             head_buf->buf_data = NULL;
+            head_buf->mempool_id = 0;
+            head_buf->need_import = 0;
             (void)memset(head_buf->qbuf_ext, 0, sizeof(head_buf->qbuf_ext));
             QBUF_LIST_INSERT_HEAD(&g_qbuf_pool.block_pool.head_without_data, head_buf);
         }
@@ -157,6 +161,8 @@ int umq_qbuf_pool_init(qbuf_pool_cfg_t *cfg)
             buf->total_data_size = buf->data_size;
             buf->headroom_size = cfg->headroom_size;
             buf->buf_data = (char *)buf + sizeof(umq_buf_t) + cfg->headroom_size;
+            buf->mempool_id = 0;
+            buf->need_import = 0;
             (void)memset(buf->qbuf_ext, 0, sizeof(buf->qbuf_ext));
             QBUF_LIST_INSERT_HEAD(&g_qbuf_pool.block_pool.head_with_data, buf);
         }
@@ -164,7 +170,7 @@ int umq_qbuf_pool_init(qbuf_pool_cfg_t *cfg)
         g_qbuf_pool.block_pool.buf_cnt_without_data = 0;
     } else {
         UMQ_VLOG_ERR("buf mode: %d is invalid\n", cfg->mode);
-        return UMQ_FAIL;
+        return -UMQ_ERR_EINVAL;
     }
 
     g_qbuf_pool.inited = true;
@@ -184,7 +190,7 @@ int umq_qbuf_alloc(uint32_t request_size, uint32_t num, umq_alloc_option_t *opti
 {
     if (!g_qbuf_pool.inited) {
         UMQ_VLOG_ERR("qbuf pool has not been inited\n");
-        return UMQ_FAIL;
+        return -UMQ_ERR_ENOMEM;
     }
 
     local_block_pool_t *local_pool = get_thread_cache();
@@ -197,12 +203,12 @@ int umq_qbuf_alloc(uint32_t request_size, uint32_t num, umq_alloc_option_t *opti
 
         if (g_qbuf_pool.mode != UMQ_BUF_SPLIT) {
             UMQ_VLOG_ERR("cannot alloc memory size 0 in combine mode\n");
-            return UMQ_FAIL;
+            return -UMQ_ERR_ENOMEM;
         }
 
         while (local_pool->buf_cnt_without_data < num) {
             if (fetch_from_global(&g_qbuf_pool.block_pool, local_pool, false, QBUF_POOL_BATCH_CNT) <= 0) {
-                return UMQ_FAIL;
+                return -UMQ_ERR_ENOMEM;
             }
         }
 
@@ -219,14 +225,14 @@ int umq_qbuf_alloc(uint32_t request_size, uint32_t num, umq_alloc_option_t *opti
     uint64_t single_size = request_size + headroom_size + (g_qbuf_pool.mode == UMQ_BUF_COMBINE ? sizeof(umq_buf_t) : 0);
     if (single_size > g_qbuf_pool.block_size) {
         UMQ_VLOG_ERR("request size[%u] too large, support max size: %u\n", request_size, g_qbuf_pool.block_size);
-        return UMQ_FAIL;
+        return -UMQ_ERR_EINVAL;
     }
 
     while (local_pool->buf_cnt_with_data < num) {
         if (fetch_from_global(&g_qbuf_pool.block_pool, local_pool, true, QBUF_POOL_BATCH_CNT) <= 0) {
             UMQ_VLOG_ERR("fetch from global failed, current size: %u, alloc num: %u\n",
                          local_pool->buf_cnt_with_data, num);
-            return UMQ_FAIL;
+            return -UMQ_ERR_ENOMEM;
         }
     }
 
@@ -270,7 +276,7 @@ int umq_qbuf_headroom_reset(umq_buf_t *qbuf, uint16_t headroom_size)
 {
     if (!g_qbuf_pool.inited) {
         UMQ_VLOG_ERR("qbuf pool has not been inited\n");
-        return UMQ_FAIL;
+        return -UMQ_ERR_ENOMEM;
     }
 
     return headroom_reset(qbuf, headroom_size, g_qbuf_pool.mode, g_qbuf_pool.block_size);
