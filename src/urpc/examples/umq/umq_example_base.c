@@ -44,9 +44,7 @@ int run_umq_example_server(struct urpc_example_config *cfg)
         goto UNBIND;
     }
 
-    bool use_shm_pool = (cfg->trans_mode == TRANS_MODE_UBMM) || (cfg->trans_mode == TRANS_MODE_UBMM_PLUS) ||
-                        (cfg->trans_mode == TRANS_MODE_IPC);
-    if (example_enqueue_data(umqh, EXAMPLE_SERVER_ENQUEUE_DATA, strlen(EXAMPLE_SERVER_ENQUEUE_DATA), use_shm_pool)) {
+    if (example_enqueue_data(umqh, EXAMPLE_SERVER_ENQUEUE_DATA, strlen(EXAMPLE_SERVER_ENQUEUE_DATA))) {
         goto UNBIND;
     }
 
@@ -89,9 +87,7 @@ int run_umq_example_client(struct urpc_example_config *cfg)
     LOG_PRINT("client bind success\n");
     sleep(1); // sleep 1s to wait for server ready
 
-    bool use_shm_pool = (cfg->trans_mode == TRANS_MODE_UBMM) || (cfg->trans_mode == TRANS_MODE_UBMM_PLUS) ||
-                        (cfg->trans_mode == TRANS_MODE_IPC);
-    if (example_enqueue_data(umqh, EXAMPLE_CLIENT_ENQUEUE_DATA, strlen(EXAMPLE_CLIENT_ENQUEUE_DATA), use_shm_pool)) {
+    if (example_enqueue_data(umqh, EXAMPLE_CLIENT_ENQUEUE_DATA, strlen(EXAMPLE_CLIENT_ENQUEUE_DATA))) {
         goto UNBIND;
     }
 

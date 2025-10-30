@@ -76,8 +76,6 @@ struct urpc_example_config {
     enum URPC_POLL_JFC_MODE poll_mode;              /* enable Interrupt */
     uint32_t feature;
     enum TRANS_MODE trans_mode;
-    bool is_local_ipc;
-    bool is_owner;
     int16_t eid_idx;
     uint16_t cna;
     enum UMQ_TRANS_MODE sub_trans_mode;
@@ -103,7 +101,7 @@ int example_post_rx(uint64_t umqh, uint32_t depth);
 int example_poll_rx(uint64_t umqh, const char *check_data, uint32_t data_size, bool with_imm_data);
 int example_post_tx(uint64_t umqh, const char *data, uint32_t data_size);
 int example_poll_tx(uint64_t umqh);
-int example_enqueue_data(uint64_t umqh, const char *data, uint32_t data_size, bool use_shm_pool);
+int example_enqueue_data(uint64_t umqh, const char *data, uint32_t data_size);
 int example_dequeue_data(uint64_t umqh, const char *check_data, uint32_t data_size);
 
 void example_flush(uint64_t umqh);

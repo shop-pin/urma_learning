@@ -44,7 +44,7 @@ int run_umq_example_pro_server(struct urpc_example_config *cfg)
     }
     LOG_PRINT("server bind success\n");
 
-    if (!cfg->is_local_ipc && example_post_rx(umqh, EXAMPLE_MAX_DEPTH) != 0) {
+    if (example_post_rx(umqh, EXAMPLE_MAX_DEPTH) != 0) {
         LOG_PRINT_ERR("server post rx failed\n");
         goto UNBIND;
     }
@@ -66,7 +66,7 @@ int run_umq_example_pro_server(struct urpc_example_config *cfg)
     }
     LOG_PRINT("server umq_wait_interrupt succeeded\n");
 
-    if (example_poll_rx(umqh, EXAMPLE_CLIENT_POST_DATA, strlen(EXAMPLE_CLIENT_POST_DATA), !cfg->is_local_ipc) != 0) {
+    if (example_poll_rx(umqh, EXAMPLE_CLIENT_POST_DATA, strlen(EXAMPLE_CLIENT_POST_DATA), true) != 0) {
         LOG_PRINT_ERR("server poll_rx failed\n");
         umq_ack_interrupt(umqh, nevents, &interrupt_option);
         goto UNBIND;
@@ -92,7 +92,7 @@ int run_umq_example_pro_server(struct urpc_example_config *cfg)
         continue;
     }
 
-    if (!cfg->is_local_ipc && poll_ret != 0) {
+    if (poll_ret != 0) {
         LOG_PRINT_ERR("server poll_tx failed\n");
         goto UNBIND;
     }
@@ -168,7 +168,7 @@ int run_umq_example_pro_client(struct urpc_example_config *cfg)
         continue;
     }
 
-    if (!cfg->is_local_ipc && poll_ret != 0) {
+    if (poll_ret != 0) {
         LOG_PRINT_ERR("client poll_tx failed\n");
         goto UNBIND;
     }
@@ -180,7 +180,7 @@ int run_umq_example_pro_client(struct urpc_example_config *cfg)
     }
     LOG_PRINT("client umq_wait_interrupt succeeded\n");
 
-    if (example_poll_rx(umqh, EXAMPLE_SERVER_POST_DATA, strlen(EXAMPLE_SERVER_POST_DATA), !cfg->is_local_ipc) != 0) {
+    if (example_poll_rx(umqh, EXAMPLE_SERVER_POST_DATA, strlen(EXAMPLE_SERVER_POST_DATA), true) != 0) {
         LOG_PRINT_ERR("client poll_rx failed\n");
         goto UNBIND;
     }

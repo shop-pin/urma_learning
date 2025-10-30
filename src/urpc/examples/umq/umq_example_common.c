@@ -49,8 +49,6 @@ static struct option g_long_options[] = {
     {"ipv6-addr",          required_argument, NULL, 'I'},
     {"feature",            required_argument, NULL, 'f'},
     {"trans-mode",         required_argument, NULL, 'T'},
-    {"local-ipc",          no_argument,       NULL, 'L'},
-    {"owner",              no_argument,       NULL, 'o'},
     {"eid-idx",            required_argument, NULL, 'E'},
     {"sub-trans-mode",     required_argument, NULL, 'S'},
     /* Long options only */
@@ -83,15 +81,12 @@ uint64_t init_and_create_umq(struct urpc_example_config *cfg, uint8_t *local_bin
 
     umq_create_option_t option = {
         .trans_mode = init_cfg->trans_info[0].trans_mode,
-        .create_flag = UMQ_CREATE_FLAG_IS_LOCAL_IPC | UMQ_CREATE_FLAG_OWNER | UMQ_CREATE_FLAG_RX_BUF_SIZE |
-            UMQ_CREATE_FLAG_TX_BUF_SIZE | UMQ_CREATE_FLAG_RX_DEPTH | UMQ_CREATE_FLAG_TX_DEPTH |
-            UMQ_CREATE_FLAG_QUEUE_MODE,
+        .create_flag = UMQ_CREATE_FLAG_RX_BUF_SIZE | UMQ_CREATE_FLAG_TX_BUF_SIZE | UMQ_CREATE_FLAG_RX_DEPTH |
+            UMQ_CREATE_FLAG_TX_DEPTH | UMQ_CREATE_FLAG_QUEUE_MODE,
         .rx_buf_size = EXAMPLE_BUFFER_SIZE,
         .tx_buf_size = EXAMPLE_BUFFER_SIZE,
         .rx_depth = EXAMPLE_DEPTH,
         .tx_depth = EXAMPLE_DEPTH,
-        .is_local_ipc = cfg->is_local_ipc,
-        .owner = cfg->is_owner,
         .mode = (umq_queue_mode_t)cfg->poll_mode
     };
     if (cfg->instance_mode == SERVER) {
@@ -333,7 +328,6 @@ int parse_trans_info(struct urpc_example_config *cfg, umq_init_cfg_t *init_cfg)
 {
     init_cfg->trans_info_num = 1;
     init_cfg->trans_info[0].trans_mode = (umq_trans_mode_t)cfg->trans_mode;
-    init_cfg->order_type = cfg->sub_trans_mode;
     init_cfg->eid_idx = cfg->eid_idx;
 
     if (cfg->dev_name != NULL) {
@@ -353,7 +347,7 @@ int parse_trans_info(struct urpc_example_config *cfg, umq_init_cfg_t *init_cfg)
 int example_post_rx(uint64_t umqh, uint32_t depth)
 {
     uint32_t request_size = EXAMPLE_REQUEST_SIZE;
-    umq_buf_t *buf = umq_buf_alloc(request_size, depth, UMQ_INVALID_HANDLE, NULL);
+    umq_buf_t *buf = umq_buf_alloc(request_size, depth, umqh, NULL);
     if (buf == NULL) {
         LOG_PRINT_ERR("alloc buf failed\n");
         return -1;
@@ -416,7 +410,7 @@ FREE:
 
 int example_post_tx(uint64_t umqh, const char *data, uint32_t data_size)
 {
-    umq_buf_t *buf = umq_buf_alloc(data_size, 1, UMQ_INVALID_HANDLE, NULL);
+    umq_buf_t *buf = umq_buf_alloc(data_size, 1, umqh, NULL);
     if (buf == NULL) {
         LOG_PRINT_ERR("alloc buf failed\n");
         return -1;
@@ -472,10 +466,9 @@ int example_poll_tx(uint64_t umqh)
     return 0;
 }
 
-int example_enqueue_data(uint64_t umqh, const char *data, uint32_t data_size, bool use_shm_pool)
+int example_enqueue_data(uint64_t umqh, const char *data, uint32_t data_size)
 {
-    uint64_t alloc_umqh = use_shm_pool ? umqh : UMQ_INVALID_HANDLE;
-    umq_buf_t *buf = umq_buf_alloc(data_size, 1, alloc_umqh, NULL);
+    umq_buf_t *buf = umq_buf_alloc(data_size, 1, umqh, NULL);
     if (buf == NULL) {
         LOG_PRINT_ERR("alloc buf failed\n");
         return -1;
@@ -551,7 +544,7 @@ int parse_arguments(int argc, char **argv, struct urpc_example_config *cfg)
         int c;
         unsigned long param;
 
-        c = getopt_long(argc, argv, "d:e:w:p:i:c:t:m:I:f:T:E:S:LoD:", g_long_options, NULL);
+        c = getopt_long(argc, argv, "d:e:w:p:i:c:t:m:I:f:T:E:S:D:", g_long_options, NULL);
         if (c == -1) {
             break;
         }
@@ -631,12 +624,6 @@ int parse_arguments(int argc, char **argv, struct urpc_example_config *cfg)
                     return -1;
                 }
                 cfg->sub_trans_mode = (int)param;
-                break;
-            case 'L':
-                cfg->is_local_ipc = true;
-                break;
-            case 'o':
-                cfg->is_owner = true;
                 break;
             case 'C':
                 cfg->cna = (uint16_t)strtoul(optarg, NULL, 0);
