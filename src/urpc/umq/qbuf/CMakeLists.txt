@@ -2,7 +2,7 @@
 # Copyright (c) Huawei Technologies Co., Ltd. 2020-2025. All rights reserved.
 
 aux_source_directory(${CMAKE_CURRENT_LIST_DIR} UMQ_QBUF_SRC)
-file(GLOB UMQ_IPC_IMPL_FILE ${CMAKE_SOURCE_DIR}/lib/util/util_ipc.c)
+file(GLOB UMQ_IPC_IMPL_FILE ${CMAKE_SOURCE_DIR}/lib/util/msg_ring.c)
 
 add_library(umq_buf SHARED
     ${UMQ_IPC_IMPL_FILE}

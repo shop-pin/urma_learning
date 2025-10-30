@@ -13,7 +13,7 @@
 #include "qbuf_list.h"
 #include "umq_types.h"
 #include "umq_qbuf_pool.h"
-#include "util_ipc.h"
+#include "msg_ring.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -37,7 +37,7 @@ typedef struct shm_qbuf_pool_cfg {
             uint32_t id;
         } local;
     };
-    util_ipc_t *ipc;
+    msg_ring_t *msg_ring;
 } shm_qbuf_pool_cfg_t;
 
 /*

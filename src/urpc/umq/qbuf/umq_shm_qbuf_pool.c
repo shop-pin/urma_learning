@@ -41,7 +41,7 @@ typedef struct qbuf_pool {
     umq_buf_mode_t mode;
 
     global_block_pool_t block_pool;
-    util_ipc_t *ipc;
+    msg_ring_t *msg_ring;
 } qbuf_pool_t;
 
 typedef struct queue_local_pool {
@@ -296,7 +296,7 @@ uint64_t umq_shm_global_pool_init(shm_qbuf_pool_cfg_t *cfg)
     pool->mode = cfg->mode;
     pool->total_size = cfg->total_size;
     pool->headroom_size = cfg->headroom_size;
-    pool->ipc = cfg->ipc;
+    pool->msg_ring = cfg->msg_ring;
     if (pool->type == SHM_QBUF_POOL_TYPE_LOCAL) {
         pool->id = cfg->local.id;
         pool->umqh = cfg->local.umqh;
@@ -323,7 +323,7 @@ void umq_shm_global_pool_uninit(uint64_t pool)
     free(_pool);
 }
 
-static ALWAYS_INLINE int umq_shm_dequeue_qbuf(util_ipc_t *ipc, uint64_t *offset, uint32_t num)
+static ALWAYS_INLINE int umq_shm_dequeue_qbuf(msg_ring_t *msg_ring, uint64_t *offset, uint32_t num)
 {
     uint32_t max_num = num > SHM_QBUF_POOL_BATCH_CNT ? SHM_QBUF_POOL_BATCH_CNT : num;
     uint64_t *rx_data_ptr[SHM_QBUF_POOL_BATCH_CNT];
@@ -333,7 +333,8 @@ static ALWAYS_INLINE int umq_shm_dequeue_qbuf(util_ipc_t *ipc, uint64_t *offset,
 
     // poll offset from shm, then transform to qbuf
     uint32_t polled_buf_size[SHM_QBUF_POOL_BATCH_CNT];
-    int ret = util_ipc_poll_rx_batch(ipc, (char **)&rx_data_ptr, sizeof(uint64_t), polled_buf_size, max_num);
+    int ret =
+        msg_ring_poll_rx_batch(msg_ring, (char **)&rx_data_ptr, sizeof(uint64_t), polled_buf_size, max_num);
     if (ret < 0) {
         UMQ_VLOG_ERR("ipc poll rx failed\n");
         return UMQ_FAIL;
@@ -374,10 +375,10 @@ static ALWAYS_INLINE bool is_with_data(umq_buf_t *qbuf, qbuf_pool_t *pool)
 
 static ALWAYS_INLINE void umq_shm_poll_and_fill_global(qbuf_pool_t *pool)
 {
-    // poll released buf from ipc rx, and return them to global pool
+    // poll released buf from msg_ring rx, and return them to global pool
     uint64_t qbuf_offset[SHM_QBUF_POOL_BATCH_CNT];
     uint32_t max_count = SHM_QBUF_POOL_BATCH_CNT;
-    int ret = umq_shm_dequeue_qbuf(pool->ipc, qbuf_offset, max_count);
+    int ret = umq_shm_dequeue_qbuf(pool->msg_ring, qbuf_offset, max_count);
     if (ret <= 0) {
         UMQ_VLOG_ERR("umq_shm_dequeue_qbuf return: %d\n", ret);
         return;
@@ -460,11 +461,11 @@ int umq_shm_qbuf_alloc(
     return UMQ_SUCCESS;
 }
 
-static ALWAYS_INLINE int umq_shm_enqueue_qbuf(util_ipc_t *ipc, uint64_t offset)
+static ALWAYS_INLINE int umq_shm_enqueue_qbuf(msg_ring_t *msg_ring, uint64_t offset)
 {
-    int ret = util_ipc_post_rx(ipc, (char *)&offset, sizeof(uint64_t));
+    int ret = msg_ring_post_rx(msg_ring, (char *)&offset, sizeof(uint64_t));
     if (ret != 0) {
-        UMQ_VLOG_ERR("ipc post rx failed\n");
+        UMQ_VLOG_ERR("msg_ring post rx failed\n");
         return ret;
     }
     return UMQ_SUCCESS;
@@ -486,7 +487,7 @@ static ALWAYS_INLINE uint64_t umq_shm_qbuf_pointer_to_offset(umq_buf_t *qbuf, ui
 static ALWAYS_INLINE void post_release_buf(qbuf_pool_t *pool, umq_buf_list_t *list)
 {
     uint64_t offset = umq_shm_qbuf_pointer_to_offset(QBUF_LIST_FIRST(list), (uint64_t)(uintptr_t)pool);
-    umq_shm_enqueue_qbuf(pool->ipc, offset);
+    umq_shm_enqueue_qbuf(pool->msg_ring, offset);
 }
 
 void umq_shm_qbuf_free(uint64_t pool, umq_buf_list_t *list)
@@ -624,6 +625,9 @@ int umq_shm_qbuf_enqueue(umq_buf_t *qbuf, uint64_t umq, uint64_t pool, bool rend
     int (*enqueue)(uint64_t umq, uint64_t *offset, uint32_t num))
 {
     uint64_t qbuf_offset = umq_shm_qbuf_pointer_to_offset(qbuf, pool);
+    if (qbuf_offset == QBUF_INVALID_OFFSET) {
+        return UMQ_FAIL;
+    }
     if (rendezvous) {
         qbuf_offset |= UMQ_RENDEZVOUS_FLAG;
     }

@@ -11,7 +11,7 @@
 #include "umq_ub_impl.h"
 #include "umq_shm_qbuf_pool.h"
 #include "util_id_generator.h"
-#include "util_ipc.h"
+#include "msg_ring.h"
 #include "umq_ub_imm_data.h"
 #include "umq_ubmm_impl.h"
 
@@ -38,7 +38,7 @@ typedef struct umq_ubmm_ring_buffer {
 } umq_ubmm_ring_buffer_t;
 
 typedef struct ubmm_bind_ctx {
-    util_ipc_t *remote_ipc;
+    msg_ring_t *remote_msg_ring;
     uint64_t remote_notify_addr;
     uint64_t qbuf_pool_handle;
     umq_ubmm_ring_buffer_t remote_ring;
@@ -48,7 +48,7 @@ typedef struct umq_ubmm_info {
     ubmm_bind_ctx_t *bind_ctx;
     umq_ubmm_init_ctx_t *ubmm_ctx;
     uint64_t ub_handle;
-    util_ipc_t *local_ipc;
+    msg_ring_t *local_msg_ring;
     umq_buf_t *notify_buf;
     uint64_t qbuf_pool_handle;
     umq_ubmm_ring_buffer_t local_ring;
@@ -259,7 +259,7 @@ uint64_t umq_ubmm_create_impl(uint64_t umqh, uint8_t *ubmm_ctx, umq_create_optio
     }
 
     tp->local_ring.cna = dev_ctx->local_cna;
-    util_ipc_option_t ipc_option = {
+    msg_ring_option_t ipc_option = {
         .owner = true,
         .tx_max_buf_size = UMQ_IPC_DATA_SIZE,
         .tx_depth = tp->local_ring.tx_depth,
@@ -269,8 +269,8 @@ uint64_t umq_ubmm_create_impl(uint64_t umqh, uint8_t *ubmm_ctx, umq_create_optio
         .addr = tp->local_ring.addr,
     };
 
-    tp->local_ipc = util_ipc_create("", 0, &ipc_option);
-    if (tp->local_ipc == NULL) {
+    tp->local_msg_ring = msg_ring_create("", 0, &ipc_option);
+    if (tp->local_msg_ring == NULL) {
         UMQ_VLOG_ERR("ipc create failed\n");
         goto RELEASE_EXPORT;
     }
@@ -292,7 +292,7 @@ uint64_t umq_ubmm_create_impl(uint64_t umqh, uint8_t *ubmm_ctx, umq_create_optio
             .umqh = umqh,
             .id = tp->umq_id,
         },
-        .ipc = tp->local_ipc,
+        .msg_ring = tp->local_msg_ring,
     };
 
     tp->qbuf_pool_handle = umq_shm_global_pool_init(&sm_qbuf_pool_cfg);
@@ -316,8 +316,8 @@ UNINIT_SM_POOL:
     umq_shm_global_pool_uninit(tp->qbuf_pool_handle);
 
 DESTROY_IPC:
-    if (tp->local_ipc != NULL) {
-        util_ipc_destroy(tp->local_ipc);
+    if (tp->local_msg_ring != NULL) {
+        msg_ring_destroy(tp->local_msg_ring);
     }
 
 RELEASE_EXPORT:
@@ -455,7 +455,7 @@ int32_t umq_ubmm_bind_impl(uint64_t umqh_tp, uint8_t *bind_info, uint32_t bind_i
         goto UB_UNBIND;
     }
 
-    util_ipc_option_t ipc_option = {
+    msg_ring_option_t ipc_option = {
         .owner = false,
         .tx_max_buf_size = UMQ_IPC_DATA_SIZE,
         .tx_depth = ctx->remote_ring.tx_depth,
@@ -464,8 +464,8 @@ int32_t umq_ubmm_bind_impl(uint64_t umqh_tp, uint8_t *bind_info, uint32_t bind_i
         .addr = ctx->remote_ring.addr,
     };
 
-    ctx->remote_ipc = util_ipc_create("", 0, &ipc_option);
-    if (ctx->remote_ipc == NULL) {
+    ctx->remote_msg_ring = msg_ring_create("", 0, &ipc_option);
+    if (ctx->remote_msg_ring == NULL) {
         UMQ_VLOG_ERR("ipc create failed\n");
         goto UNIMPORT;
     }
@@ -481,7 +481,7 @@ int32_t umq_ubmm_bind_impl(uint64_t umqh_tp, uint8_t *bind_info, uint32_t bind_i
         .headroom_size = tmp_info->shm_qbuf_pool_headroom_size,
         .mode = tmp_info->shm_qbuf_pool_mode,
         .type = SHM_QBUF_POOL_TYPE_REMOTE,
-        .ipc = ctx->remote_ipc,
+        .msg_ring = ctx->remote_msg_ring,
     };
 
     ctx->qbuf_pool_handle = umq_shm_global_pool_init(&sm_qbuf_pool_cfg);
@@ -494,7 +494,7 @@ int32_t umq_ubmm_bind_impl(uint64_t umqh_tp, uint8_t *bind_info, uint32_t bind_i
     return UMQ_SUCCESS;
 
 DESTROY_IPC:
-    util_ipc_destroy(ctx->remote_ipc);
+    msg_ring_destroy(ctx->remote_msg_ring);
 
 UNIMPORT:
     obmem_release_import_memory(ctx->remote_ring.handle, ctx->remote_ring.addr, ctx->remote_ring.ubmm_export.size);
@@ -615,7 +615,7 @@ static ALWAYS_INLINE int enqueue_data(uint64_t umqh_tp, uint64_t *offset, uint32
         sizes[i] = sizeof(uint64_t);
     }
 
-    int ret = util_ipc_post_tx_batch(tp->local_ipc, (char **)&offset, sizes, num);
+    int ret = msg_ring_post_tx_batch(tp->local_msg_ring, (char **)&offset, sizes, num);
     if (ret != 0) {
         UMQ_VLOG_ERR("ipc post tx failed\n");
         return ret;
@@ -697,7 +697,7 @@ static ALWAYS_INLINE int dequeue_data(uint64_t umq, uint64_t *offset, uint32_t n
     umq_ubmm_info_t *tp = (umq_ubmm_info_t *)(uintptr_t)umq;
     // poll offset from shm, then transform to qbuf
     uint32_t polled_buf_size[num];
-    int ret = util_ipc_poll_tx_batch(tp->bind_ctx->remote_ipc, (char **)&rx_data_ptr,
+    int ret = msg_ring_poll_tx_batch(tp->bind_ctx->remote_msg_ring, (char **)&rx_data_ptr,
                                      sizeof(uint64_t), polled_buf_size, num);
     if (ret < 0) {
         UMQ_VLOG_ERR("ipc poll rx failed\n");

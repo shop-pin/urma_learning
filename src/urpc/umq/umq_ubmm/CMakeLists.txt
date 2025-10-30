@@ -6,7 +6,7 @@ include_directories(${CMAKE_CURRENT_LIST_DIR}/../umq_ub)
 
 aux_source_directory(${CMAKE_CURRENT_LIST_DIR} UMQ_UBMM_LIB_DIR_SRCS)
 file(GLOB UMQ_UB_IMPL_FILE ${CMAKE_SOURCE_DIR}/urpc/umq/umq_ub/umq_ub_impl.c)
-file(GLOB UTIL_SRCS ${CMAKE_SOURCE_DIR}/urpc/umq/util_ipc.c)
+file(GLOB UTIL_SRCS ${CMAKE_SOURCE_DIR}/urpc/umq/msg_ring.c)
 
 add_library(umq_ubmm SHARED
         ${UMQ_UBMM_LIB_DIR_SRCS}
