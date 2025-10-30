@@ -84,9 +84,12 @@ int umq_unbind(uint64_t umqh);
  * Alloc umq buf, qbuf list with qbuf_next.
  * @param[in] request_size: size of qbuf request to alloc
  * @param[in] request_qbuf_num: num of qbuf request to alloc
- * @param[in] umqh: umq handle, use for mode ubmm
+ * @param[in] umqh: umq handle, use for mode ipc/ubmm
  * @param[in] option: alloc option param
- * mode ubmm: only alloc buf from umqh pool
+ * (1) mode ipc/ubmm: each queue has a small shared memory pool. When using shared memory via ipc or ubmm
+ * you need to pass the umqh parameter to specify which queue's memory pool the request is coming from
+ * (2) In other scenarios, memory will be allocted from the global memory pool, which supports hierachical
+ *  expansion with sizes including 8KB, 256KB, and 8MB
  * mode ub/ib: alloc buf from thread local pool first, then alloc buf from global pool
  * Return umq_buf_t *qbuf on success, NULL on failure (get error code from errno)
  */

@@ -15,6 +15,7 @@
 #include "umq_vlog.h"
 #include "umq_inner.h"
 #include "umq_qbuf_pool.h"
+#include "umq_huge_qbuf_pool.h"
 #include "umq_errno.h"
 #include "urpc_util.h"
 
@@ -54,7 +55,7 @@ static umq_framework_t g_umq_fws[UMQ_TRANS_MODE_MAX] = {
         .ops_get_func = NULL,
         .tp_ops = NULL,
         .ctx = NULL,
-    
+
         .pro_ops_get_funcname = "umq_pro_ub_ops_get",
         .pro_ops_get_func = NULL,
         .pro_tp_ops = NULL,
@@ -70,7 +71,7 @@ static umq_framework_t g_umq_fws[UMQ_TRANS_MODE_MAX] = {
         .ops_get_func = NULL,
         .tp_ops = NULL,
         .ctx = NULL,
-    
+
         .pro_ops_get_funcname = "umq_pro_ib_ops_get",
         .pro_ops_get_func = NULL,
         .pro_tp_ops = NULL,
@@ -86,7 +87,7 @@ static umq_framework_t g_umq_fws[UMQ_TRANS_MODE_MAX] = {
         .ops_get_func = NULL,
         .tp_ops = NULL,
         .ctx = NULL,
-    
+
         .pro_ops_get_funcname = "umq_pro_ucp_ops_get",
         .pro_ops_get_func = NULL,
         .pro_tp_ops = NULL,
@@ -102,7 +103,7 @@ static umq_framework_t g_umq_fws[UMQ_TRANS_MODE_MAX] = {
         .ops_get_func = NULL,
         .tp_ops = NULL,
         .ctx = NULL,
-    
+
         .pro_ops_get_funcname = "umq_pro_ipc_ops_get",
         .pro_ops_get_func = NULL,
         .pro_tp_ops = NULL,
@@ -118,7 +119,7 @@ static umq_framework_t g_umq_fws[UMQ_TRANS_MODE_MAX] = {
         .ops_get_func = NULL,
         .tp_ops = NULL,
         .ctx = NULL,
-    
+
         .pro_ops_get_funcname = "umq_pro_ubmm_ops_get",
         .pro_ops_get_func = NULL,
         .pro_tp_ops = NULL,
@@ -181,8 +182,8 @@ void umq_uninit(void)
     }
 
     umq_dfx_uninit();
+    umq_qbuf_pool_uninit();
     uint8_t fw_i;
-
     for (fw_i = 0; fw_i < UMQ_TRANS_MODE_MAX; fw_i++) {
         umq_framework_t *umq_fw = &g_umq_fws[fw_i];
         umq_fw->pro_tp_ops = NULL;
@@ -224,22 +225,22 @@ int umq_init(umq_init_cfg_t *cfg)
 {
     if (g_umq_inited) {
         UMQ_VLOG_ERR("umq has already been inited\n");
-        return UMQ_FAIL;
+        return -UMQ_ERR_EEXIST;
     }
 
     if (cfg == NULL) {
         UMQ_VLOG_ERR("cfg is null\n");
-        return UMQ_FAIL;
+        return -UMQ_ERR_EINVAL;
     }
 
     if (cfg->trans_info_num > MAX_UMQ_TRANS_INFO_NUM || cfg->trans_info_num == 0) {
         UMQ_VLOG_ERR("trans_info_num[%u] is invalid\n", cfg->trans_info_num);
-        return UMQ_FAIL;
+        return -UMQ_ERR_EINVAL;
     }
 
     if ((cfg->feature & UMQ_FEATURE_ENABLE_TOKEN_POLICY) != 0 && urpc_rand_seed_init() != 0) {
         UMQ_VLOG_ERR("rand seed init failed\n");
-        return UMQ_FAIL;
+        return -UMQ_ERR_EINVAL;
     }
 
     bool valid_enable = false;
@@ -255,13 +256,13 @@ int umq_init(umq_init_cfg_t *cfg)
 
     if (!valid_enable) {
         UMQ_VLOG_ERR("no valid trans info provided\n");
-        return UMQ_FAIL;
+        return -UMQ_ERR_EINVAL;
     }
 
     g_buffer_addr = (void *)memalign(UMQ_SIZE_8K, g_total_len);
     if (g_buffer_addr == NULL) {
         UMQ_VLOG_ERR("memory alloc failed\n");
-        return UMQ_FAIL;
+        return -UMQ_ERR_ENOMEM;
     }
 
     for (uint8_t fw_i = 0; fw_i < UMQ_TRANS_MODE_MAX; fw_i++) {
@@ -317,7 +318,7 @@ int umq_init(umq_init_cfg_t *cfg)
         goto INIT_FAIL;
     }
 
-    if(umq_dfx_init(cfg) != UMQ_SUCCESS) {
+    if (umq_dfx_init(cfg) != UMQ_SUCCESS) {
         UMQ_VLOG_ERR("umq dfx init failed\n");
         goto INIT_FAIL;
     }
@@ -379,7 +380,7 @@ int umq_destroy(uint64_t umqh)
     if ((umq == NULL) || (umq->umqh_tp == UMQ_INVALID_HANDLE) || (umq->tp_ops == NULL) ||
         (umq->tp_ops->umq_tp_destroy == NULL)) {
         UMQ_VLOG_ERR("umqh invalid\n");
-        return UMQ_FAIL;
+        return -UMQ_ERR_EINVAL;
     }
 
     ret = umq->tp_ops->umq_tp_destroy(umq->umqh_tp);
@@ -411,7 +412,7 @@ int umq_bind(uint64_t umqh, uint8_t *bind_info, uint32_t bind_info_size)
     if ((bind_info == NULL) || (umq == NULL) || (umq->umqh_tp == UMQ_INVALID_HANDLE) || (umq->tp_ops == NULL) ||
         (umq->tp_ops->umq_tp_bind == NULL)) {
         UMQ_VLOG_ERR("bind_info or umqh invalid\n");
-        return UMQ_FAIL;
+        return -UMQ_ERR_EINVAL;
     }
 
     return umq->tp_ops->umq_tp_bind(umq->umqh_tp, bind_info, bind_info_size);
@@ -424,7 +425,7 @@ int umq_unbind(uint64_t umqh)
     if ((umq == NULL) || (umq->umqh_tp == UMQ_INVALID_HANDLE) || (umq->tp_ops == NULL) ||
         (umq->tp_ops->umq_tp_unbind == NULL)) {
         UMQ_VLOG_ERR("umqh invalid\n");
-        return UMQ_FAIL;
+        return -UMQ_ERR_EINVAL;
     }
 
     return umq->tp_ops->umq_tp_unbind(umq->umqh_tp);
@@ -439,8 +440,16 @@ umq_buf_t *umq_buf_alloc(uint32_t request_size, uint32_t request_qbuf_num, uint6
     if (umqh == UMQ_INVALID_HANDLE) {
         umq_buf_list_t head;
         QBUF_LIST_INIT(&head);
-        if (umq_qbuf_alloc(request_size, request_qbuf_num, option, &head) != UMQ_SUCCESS) {
-            return NULL;
+        if (request_size > HUGE_QBUF_POOL_SIZE_8K) {
+            enum HUGE_QBUF_POOL_SIZE_TYPE type = (request_size > HUGE_QBUF_POOL_SIZE_256K) ?
+                HUGE_QBUF_POOL_SIZE_TYPE_BIG : HUGE_QBUF_POOL_SIZE_TYPE_SMALL;
+            if (umq_huge_qbuf_alloc(type, request_size, request_qbuf_num, option, &head) != UMQ_SUCCESS) {
+                return NULL;
+            }
+        } else {
+            if (umq_qbuf_alloc(request_size, request_qbuf_num, option, &head) != UMQ_SUCCESS) {
+                return NULL;
+            }
         }
 
         return QBUF_LIST_FIRST(&head);
@@ -465,7 +474,55 @@ void umq_buf_free(umq_buf_t *qbuf)
     umq_buf_list_t head;
     QBUF_LIST_FIRST(&head) = qbuf;
     if (qbuf->umqh == UMQ_INVALID_HANDLE) {
-        umq_qbuf_free(&head);
+        if (QBUF_LIST_NEXT(qbuf) == NULL) {
+            if (qbuf->mempool_id != UMQ_QBUF_DEFAULT_MEMPOOL_ID) {
+                umq_huge_qbuf_free(&head);
+            } else {
+                umq_qbuf_free(&head);
+            }
+
+            return;
+        }
+
+        /* Here, the free list will be traversed, and an attempt will be made to scan each qbuf object.
+        * If there exist n consecutive qbuf objects that belong to the same memory pool, they will be
+        * released in batch. */
+        umq_buf_t *cur_node = NULL;
+        umq_buf_t *next_node = NULL;
+        umq_buf_t *last_node = NULL;
+        umq_buf_t *free_node = qbuf; // head of the list to be released
+        umq_buf_list_t free_head;
+        QBUF_LIST_FIRST(&free_head) = free_node;
+        bool is_huge = qbuf->mempool_id != UMQ_QBUF_DEFAULT_MEMPOOL_ID; // Specify the list to be released currently
+                                                                        // belongs to large or general pool.
+        QBUF_LIST_FIRST(&head) = QBUF_LIST_NEXT(qbuf);
+
+        QBUF_LIST_FOR_EACH_SAFE(cur_node, &head, next_node)
+        {
+            if ((is_huge && (cur_node->mempool_id != UMQ_QBUF_DEFAULT_MEMPOOL_ID)) ||
+                (!is_huge && (cur_node->mempool_id == 0))) {
+                // current qbuf is in the same pool, scan the next one directly
+                last_node = cur_node;
+                continue;
+            }
+
+            QBUF_LIST_NEXT(last_node) = NULL;
+            QBUF_LIST_FIRST(&free_head) = free_node;
+            free_node = cur_node;
+            is_huge = cur_node->mempool_id != UMQ_QBUF_DEFAULT_MEMPOOL_ID;
+            if (free_node->mempool_id != UMQ_QBUF_DEFAULT_MEMPOOL_ID) {
+                umq_huge_qbuf_free(&free_head);
+            } else {
+                umq_qbuf_free(&free_head);
+            }
+        }
+
+        QBUF_LIST_FIRST(&free_head) = free_node;
+        if (free_node->mempool_id != UMQ_QBUF_DEFAULT_MEMPOOL_ID) {
+            umq_huge_qbuf_free(&free_head);
+        } else {
+            umq_qbuf_free(&free_head);
+        }
         return;
     }
 
@@ -482,7 +539,7 @@ void umq_buf_free(umq_buf_t *qbuf)
 int umq_buf_headroom_reset(umq_buf_t *qbuf, uint16_t headroom_size)
 {
     if (!g_umq_inited || qbuf == NULL) {
-        return UMQ_FAIL;
+        return -UMQ_ERR_EINVAL;
     }
 
     if (qbuf->umqh == UMQ_INVALID_HANDLE) {
@@ -493,7 +550,7 @@ int umq_buf_headroom_reset(umq_buf_t *qbuf, uint16_t headroom_size)
     if ((umq->umqh_tp == UMQ_INVALID_HANDLE) || (umq->tp_ops == NULL) ||
         (umq->tp_ops->umq_tp_buf_headroom_reset == NULL)) {
         UMQ_VLOG_ERR("umqh or tp invalid\n");
-        return UMQ_FAIL;
+        return -UMQ_ERR_EINVAL;
     }
 
     return umq->tp_ops->umq_tp_buf_headroom_reset(qbuf, headroom_size);
@@ -516,7 +573,7 @@ int umq_enqueue(uint64_t umqh, umq_buf_t *qbuf, umq_buf_t **bad_qbuf)
     if ((umq == NULL) || (umq->umqh_tp == UMQ_INVALID_HANDLE) || (umq->tp_ops == NULL) ||
         (umq->tp_ops->umq_tp_enqueue == NULL) || qbuf == NULL || bad_qbuf == NULL) {
         UMQ_VLOG_ERR("umqh or qbuf invalid\n");
-        return UMQ_FAIL;
+        return -UMQ_ERR_EINVAL;
     }
 
     int ret = umq->tp_ops->umq_tp_enqueue(umq->umqh_tp, qbuf, bad_qbuf);
@@ -562,7 +619,7 @@ int umq_rearm_interrupt(uint64_t umqh, bool solicated, umq_interrupt_option_t *o
     if (option == NULL || (umq == NULL) || (umq->umqh_tp == UMQ_INVALID_HANDLE) || (umq->tp_ops == NULL) ||
         (umq->tp_ops->umq_tp_rearm_interrupt == NULL)) {
         UMQ_VLOG_ERR("umqh or option invalid\n");
-        return UMQ_FAIL;
+        return -UMQ_ERR_EINVAL;
     }
 
     return umq->tp_ops->umq_tp_rearm_interrupt(umq->umqh_tp, solicated, option);
@@ -575,7 +632,7 @@ int32_t umq_wait_interrupt(uint64_t wait_umqh, int time_out, umq_interrupt_optio
     if (option == NULL || (umq == NULL) || (umq->umqh_tp == UMQ_INVALID_HANDLE) || (umq->tp_ops == NULL) ||
         (umq->tp_ops->umq_tp_wait_interrupt == NULL)) {
         UMQ_VLOG_ERR("umqh or option invalid\n");
-        return UMQ_FAIL;
+        return -UMQ_ERR_EINVAL;
     }
 
     return umq->tp_ops->umq_tp_wait_interrupt(umq->umqh_tp, time_out, option);

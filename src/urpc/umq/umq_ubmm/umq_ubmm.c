@@ -36,7 +36,6 @@ UNINIT:
 
 static void umq_tp_ubmm_uninit(uint8_t *ctx)
 {
-    umq_qbuf_pool_uninit();
     umq_ubmm_unregister_memory_impl(ctx);
     umq_ubmm_ctx_uninit_impl(ctx);
 }
@@ -71,7 +70,7 @@ static umq_buf_t *umq_tp_ubmm_buf_alloc(uint32_t request_size, uint32_t request_
 {
     return umq_ubmm_buf_alloc_impl(request_size, request_qbuf_num, umqh_tp, option);
 }
- 
+
 static void umq_tp_ubmm_buf_free(umq_buf_t *qbuf, uint64_t umqh_tp)
 {
     umq_tp_ubmm_buf_free_impl(qbuf, umqh_tp);

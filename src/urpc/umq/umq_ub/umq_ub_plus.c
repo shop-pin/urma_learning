@@ -27,7 +27,15 @@ static uint8_t *umq_tp_ub_plus_init(umq_init_cfg_t *cfg, void *addr, uint64_t le
         goto UNINIT;
     }
 
+    if (umq_ub_huge_qbuf_pool_init(cfg) != UMQ_SUCCESS) {
+        UMQ_VLOG_ERR("init huge qbuf pool configuration faiiled\n");
+        goto UNINIT_MEM;
+    }
+
     return ub_ctx;
+
+UNINIT_MEM:
+    umq_ub_unregister_memory_impl(ub_ctx);
 
 UNINIT:
     umq_ub_ctx_uninit_impl(ub_ctx);
@@ -40,7 +48,7 @@ static void umq_tp_ub_plus_uninit(uint8_t *ctx)
         UMQ_VLOG_ERR("ub_ctx is null\n");
         return;
     }
-    umq_qbuf_pool_uninit();
+    umq_ub_huge_qbuf_pool_uninit();
     umq_ub_unregister_memory_impl(ctx);
     umq_ub_ctx_uninit_impl(ctx);
 }

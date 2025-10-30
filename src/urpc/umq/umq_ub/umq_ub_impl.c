@@ -9,6 +9,7 @@
 
 #include <pthread.h>
 #include <sys/queue.h>
+#include <malloc.h>
 
 #include "dfx.h"
 #include "perf.h"
@@ -19,6 +20,7 @@
 #include "umq_errno.h"
 #include "umq_qbuf_pool.h"
 #include "umq_inner.h"
+#include "umq_huge_qbuf_pool.h"
 #include "util_id_generator.h"
 #include "umq_ub_imm_data.h"
 #include "umq_ub_impl.h"
@@ -34,8 +36,15 @@
 #define UMQ_FLUSH_MAX_RETRY_TIMES 10000
 #define UMQ_MAX_ID_NUM (2 ^ 16)
 #define UMQ_CONTINUE_FLAG 1
+#define UMQ_MAX_QBUF_NUM 1
+#define UMQ_MAX_TSEG_NUM 255
+#define HUGE_QBUF_BUFFER_INC_BATCH 64
+#define UMQ_DEFAULT_MEMPOOL_ID 0
+#define UMQ_ENABLE_INLINE_LIMIT_SIZE 32
+#define UMQ_INLINE_ENABLE 1
 
 #define UMQ_DATA_LIMIT_SIZE            (8 * 1024) // 8KB
+
 util_id_allocator_t g_umq_ub_id_allocator = {0};
 
 typedef enum order_type {
@@ -54,6 +63,7 @@ typedef struct umq_ub_ctx {
     urma_device_attr_t dev_attr;
     umq_dev_assign_t dev_info;
     urma_target_seg_t *tseg;
+    urma_target_seg_t *tseg_list[UMQ_MAX_TSEG_NUM];
     urma_target_jetty_t *tjetty;
     umq_trans_info_t trans_info;
 } umq_ub_ctx_t;
@@ -198,6 +208,117 @@ static uint32_t g_ub_ctx_count = 0;
 static inline uint32_t token_policy_get(bool enable)
 {
     return enable ? URMA_TOKEN_PLAIN_TEXT : URMA_TOKEN_NONE;
+}
+
+static inline int umq_ub_token_generate(bool enable_token, uint32_t *token)
+{
+    if (!enable_token) {
+        *token = get_timestamp();
+        return 0;
+    }
+
+    return urpc_rand_generate((uint8_t *)token, sizeof(uint32_t));
+}
+
+static int huge_qbuf_pool_memory_init(uint8_t mempool_id, enum HUGE_QBUF_POOL_SIZE_TYPE type, void **buffer_addr)
+{
+    uint32_t total_len = (type == HUGE_QBUF_POOL_SIZE_TYPE_SMALL) ?
+        HUGE_QBUF_POOL_SIZE_256K * HUGE_QBUF_BUFFER_INC_BATCH : HUGE_QBUF_POOL_SIZE_8M * HUGE_QBUF_BUFFER_INC_BATCH;
+    void *addr = (void*)memalign(UMQ_SIZE_8K, total_len);
+    if (addr == NULL) {
+        UMQ_VLOG_ERR("memory alloc failed\n");
+        return -UMQ_ERR_ENOMEM;
+    }
+
+    bool enable_token = (g_ub_ctx->feature & UMQ_FEATURE_ENABLE_TOKEN_POLICY) != 0;
+    uint32_t mem_token;
+    int ret = umq_ub_token_generate(enable_token, &mem_token);
+    if (ret != UMQ_SUCCESS) {
+        UMQ_VLOG_ERR("generate memory token failed\n");
+        free(addr);
+        return ret;
+    }
+
+    urma_reg_seg_flag_t flag = {
+        .bs.token_policy = token_policy_get(enable_token),
+        .bs.cacheable = URMA_NON_CACHEABLE,
+        .bs.reserved = 0,
+        .bs.access = URMA_ACCESS_READ | URMA_ACCESS_WRITE | URMA_ACCESS_ATOMIC
+    };
+    urma_token_t token = { .token = mem_token };
+    urma_seg_cfg_t seg_cfg = {
+        .va = (uintptr_t)addr,
+        .len = total_len,
+        .token_id = NULL,
+        .token_value = token,
+        .flag = flag,
+        .user_ctx = token.token,
+        .iova = 0
+    };
+    g_ub_ctx->tseg_list[mempool_id] = urma_register_seg(g_ub_ctx->urma_ctx, &seg_cfg);
+    if (g_ub_ctx->tseg_list[mempool_id] == NULL) {
+        UMQ_VLOG_ERR("failed to register segment\n");
+        free(addr);
+        return -UMQ_ERR_EINVAL;
+    }
+
+    *buffer_addr = addr;
+
+    return UMQ_SUCCESS;
+}
+
+static void huge_qbuf_pool_memory_uninit(uint8_t mempool_id, void *buf_addr)
+{
+    if (g_ub_ctx->tseg_list[mempool_id] == NULL) {
+        return;
+    }
+
+    if (urma_unregister_seg(g_ub_ctx->tseg_list[mempool_id]) != URMA_SUCCESS) {
+        UMQ_VLOG_ERR("huge qbuf pool unregister segment failed, pool id: %u\n", mempool_id);
+    }
+    g_ub_ctx->tseg_list[mempool_id] = NULL;
+
+    free(buf_addr);
+}
+
+int32_t umq_ub_huge_qbuf_pool_init(umq_init_cfg_t *cfg)
+{
+    huge_qbuf_pool_cfg_t small_cfg = {
+        .total_size = HUGE_QBUF_POOL_SIZE_256K * HUGE_QBUF_BUFFER_INC_BATCH,
+        .data_size = HUGE_QBUF_POOL_SIZE_256K,
+        .headroom_size = cfg->headroom_size,
+        .mode = cfg->buf_mode,
+        .type = HUGE_QBUF_POOL_SIZE_TYPE_SMALL,
+        .memory_init_callback = huge_qbuf_pool_memory_init,
+        .memory_uninit_callback = huge_qbuf_pool_memory_uninit,
+    };
+    int ret = umq_huge_qbuf_config_init(&small_cfg);
+    if (ret != UMQ_SUCCESS) {
+        UMQ_VLOG_ERR("initialize configuration for huge qbuf pool(small) failed\n");
+        return ret;
+    }
+
+    huge_qbuf_pool_cfg_t big_cfg = {
+        .total_size = HUGE_QBUF_POOL_SIZE_8M * HUGE_QBUF_BUFFER_INC_BATCH,
+        .data_size = HUGE_QBUF_POOL_SIZE_8M,
+        .headroom_size = cfg->headroom_size,
+        .mode = cfg->buf_mode,
+        .type = HUGE_QBUF_POOL_SIZE_TYPE_BIG,
+        .memory_init_callback = huge_qbuf_pool_memory_init,
+        .memory_uninit_callback = huge_qbuf_pool_memory_uninit,
+    };
+    ret = umq_huge_qbuf_config_init(&big_cfg);
+    if (ret != UMQ_SUCCESS) {
+        UMQ_VLOG_ERR("initialize configuration for huge qbuf pool(big) failed\n");
+        return ret;
+    }
+
+    return UMQ_SUCCESS;
+}
+
+void umq_ub_huge_qbuf_pool_uninit(void)
+{
+    umq_huge_qbuf_pool_uninit();
 }
 
 static ALWAYS_INLINE urma_opcode_t transform_op_code(umq_opcode_t opcode)
@@ -514,16 +635,6 @@ int umq_modify_ubq_to_err(ub_queue_t *queue)
 
     queue->state = UMQ_UB_QUEUE_STATE_ERR;
     return urma_status;
-}
-
-static inline int umq_ub_token_generate(bool enable_token, uint32_t *token)
-{
-    if (!enable_token) {
-        *token = get_timestamp();
-        return 0;
-    }
-
-    return urpc_rand_generate((uint8_t *)token, sizeof(uint32_t));
 }
 
 int32_t umq_ub_register_memory_impl(uint8_t *ub_ctx, void *buf, uint64_t size)
