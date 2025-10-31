@@ -91,7 +91,7 @@ static void umq_tp_ub_plus_buf_free(umq_buf_t *qbuf, uint64_t umqh_tp)
 
 static int umq_tp_ub_plus_enqueue(uint64_t umqh_tp, umq_buf_t *qbuf, umq_buf_t **bad_qbuf)
 {
-    return umq_ub_enqueue_impl(umqh_tp, qbuf, bad_qbuf);
+    return umq_ub_enqueue_impl_plus(umqh_tp, qbuf, bad_qbuf);
 }
 
 static umq_buf_t *umq_tp_ub_plus_dequeue(uint64_t umqh_tp)
