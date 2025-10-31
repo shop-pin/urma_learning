@@ -185,7 +185,7 @@ struct umq_buf {
 
     uint64_t status : 32;                 // status of umq buf
     uint64_t io_direction : 2;            // 0: no direction; 1: tx qbuf; 2: rx qbuf
-    uint64_t write_flag : 1;
+    uint64_t reverse_pull_done : 1;
     uint64_t need_import : 1;
     uint64_t rsvd3 : 28;
 

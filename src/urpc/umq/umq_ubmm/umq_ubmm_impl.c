@@ -15,6 +15,8 @@
 #include "umq_ub_imm_data.h"
 #include "umq_ubmm_impl.h"
 
+#define UMQ_MAX_TSGE_NUM 255
+
 typedef struct umq_ubmm_init_ctx {
     uint8_t *ub_init_ctx;
     umq_trans_info_t trans_info;
@@ -81,7 +83,7 @@ typedef struct umq_ubmm_bind_info {
 typedef struct umq_ubmm_ref_sge_info {
     uint32_t sge_num;
     uint16_t msg_id;
-    ub_ref_sge_t sge[0];
+    char ub_ref_info[0];
 } __attribute__((packed)) umq_ubmm_ref_sge_info_t;
 static const uint32_t UMQ_IPC_DATA_SIZE = sizeof(uint64_t) + sizeof(uint32_t);
 static umq_ubmm_init_ctx_t *g_ubmm_ctx = NULL;
@@ -208,7 +210,7 @@ uint64_t umq_ubmm_create_impl(uint64_t umqh, uint8_t *ubmm_ctx, umq_create_optio
     }
 
     // call ub create
-    tp->ub_handle = umq_ub_create_impl(dev_ctx->ub_init_ctx, option);
+    tp->ub_handle = umq_ub_create_impl(umqh, dev_ctx->ub_init_ctx, option);
     if (tp->ub_handle == UMQ_INVALID_HANDLE) {
         goto FREE_INFO;
     }
@@ -631,25 +633,40 @@ static ALWAYS_INLINE umq_buf_t *umq_prepare_rendezvous_data(umq_ubmm_info_t *tp,
         return NULL;
     }
 
-    uint32_t max_ref_sge_num = (UMQ_SIZE_8K - sizeof(umq_ubmm_ref_sge_info_t)) / sizeof(ub_ref_sge_t);
+    uint32_t max_ref_sge_num =
+        (UMQ_SIZE_8K - sizeof(umq_ubmm_ref_sge_info_t) - sizeof(umq_imm_head_t)) / sizeof(ub_ref_sge_t);
+
     umq_ubmm_ref_sge_info_t *ref_sge_info = (umq_ubmm_ref_sge_info_t *)(uintptr_t)send_buf->buf_data;
+    umq_imm_head_t *umq_imm_head = (umq_imm_head_t *)(uintptr_t)ref_sge_info->ub_ref_info;
+    ub_ref_sge_t *ref_seg = (ub_ref_sge_t *)(uintptr_t)(umq_imm_head + 1);
+    ub_fill_umq_imm_head(umq_imm_head, qbuf);
+
+    ub_import_mempool_info_t import_mempool_info[UMQ_MAX_TSGE_NUM];
     umq_buf_t *tmp_buf = qbuf;
     uint32_t idx = 0;
-    uint32_t token_id, token_value;
-    umq_ub_get_token(tp->ub_handle, &token_id, &token_value);
     while (tmp_buf != NULL) {
         if (idx >= max_ref_sge_num) {
             UMQ_VLOG_ERR("rendezvoud buf count exceed max support count[%u]\n", max_ref_sge_num);
             umq_buf_free(send_buf);
             return NULL;
         }
-        ref_sge_info->sge[idx].addr = (uint64_t)(uintptr_t)tmp_buf->buf_data;
-        ref_sge_info->sge[idx].length = tmp_buf->data_size;
-        ref_sge_info->sge[idx].token_id = token_id;
-        ref_sge_info->sge[idx++].token_value = token_value;
-
+        ubmm_fill_big_data_ref_sge(
+            tp->ub_handle, ref_seg, tmp_buf, &import_mempool_info[umq_imm_head->mempool_num], umq_imm_head);
         tmp_buf = tmp_buf->qbuf_next;
+        ref_seg = ref_seg + 1;
+        idx++;
     }
+
+    if (umq_imm_head->type == IMM_PROTOCAL_TYPE_IMPORT_MEM) {
+        if ((sizeof(umq_imm_head_t) + sizeof(ub_ref_sge_t) * idx +
+            sizeof(ub_import_mempool_info_t) * umq_imm_head->mempool_num) > UMQ_SIZE_8K) {
+            UMQ_LIMIT_VLOG_ERR("import memvipool info is not enough\n");
+            return NULL;
+        }
+        (void)memcpy(ref_seg,
+            import_mempool_info, sizeof(ub_import_mempool_info_t) * umq_imm_head->mempool_num);
+    }
+
     ref_sge_info->sge_num = idx;
     ref_sge_info->msg_id = util_id_allocator_get(umq_ub_get_msg_id_generator(tp->ub_handle));
     *msg_id = ref_sge_info->msg_id;
@@ -763,7 +780,7 @@ void umq_ubmm_notify_impl(uint64_t umqh_tp)
         return;
     }
 
-    umq_ub_write_imm(tp->ub_handle, tp->bind_ctx->remote_notify_addr, 1);
+    umq_ub_write_imm(tp->ub_handle, tp->bind_ctx->remote_notify_addr, 1, 0);
 }
 
 int umq_ubmm_rearm_interrupt_impl(uint64_t umqh_tp, bool solicated, umq_interrupt_option_t *option)
