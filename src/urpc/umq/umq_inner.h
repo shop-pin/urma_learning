@@ -31,8 +31,6 @@ extern "C" {
 #define UMQ_MAX_QUEUE_NUMBER            8192
 #define UMQ_SIZE_4M                     (0x400000)
 #define SHM_MODE (0660)
-#define UMQ_MAX_QUEUE_NUMBER            8192
-
 
 typedef struct umq {
     umq_trans_mode_t mode;

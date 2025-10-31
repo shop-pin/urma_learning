@@ -47,7 +47,7 @@ static void umq_tp_ub_uninit(uint8_t *ctx)
 
 static uint64_t umq_tp_ub_create(uint64_t umqh __attribute__((unused)), uint8_t *ctx, umq_create_option_t *option)
 {
-    return umq_ub_create_impl(ctx, option);
+    return umq_ub_create_impl(umqh, ctx, option);
 }
 
 static int umq_tp_ub_destroy(uint64_t umqh_tp)
@@ -73,7 +73,7 @@ static int umq_tp_ub_unbind(uint64_t umqh_tp)
 static umq_buf_t *umq_tp_ub_buf_alloc(uint32_t request_size, uint32_t request_qbuf_num, uint64_t umqh_tp,
     umq_alloc_option_t *option)
 {
-    return umq_tp_ub_alloc_impl(request_size, request_qbuf_num, umqh_tp, option);
+    return umq_ub_buf_alloc_impl(request_size, request_qbuf_num, umqh_tp, option);
 }
 
 static void umq_tp_ub_buf_free(umq_buf_t *qbuf, uint64_t umqh_tp)

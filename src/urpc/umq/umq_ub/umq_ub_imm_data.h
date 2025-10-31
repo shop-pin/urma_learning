@@ -22,7 +22,7 @@ typedef enum umq_ub_imm_type {
     IMM_TYPE_REVERSE_PULL_MEM,      // used for reverse pull mem in ub plus mode
     IMM_TYPE_REVERSE_PULL_MEM_FREE, // used for free reverse pull mem in ub plus mode
     IMM_TYPE_FLOW_CONTROL,          // used for flow control window exchange
-
+    IMM_TYPE_MEM_IMPORT_DONE,       // used for import mem in ub plus mode
     IMM_TYPE_MAX,                   // max type should not exceed 32, for type is 5 bit
 } umq_ub_imm_type_t;
 
@@ -48,6 +48,13 @@ typedef union umq_ub_imm {
         uint64_t window : 16;
         uint64_t rsvd2 : 32;
     } flow_control;
+    struct {
+        uint64_t umq_private : 1;
+        uint64_t type : 5;
+        uint64_t rsvd1 : 10;
+        uint64_t mempool_id : 16;
+        uint64_t rsvd2 : 32;
+    } mem_import_done;
 } umq_ub_imm_t;
 
 #ifdef __cplusplus
