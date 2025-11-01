@@ -581,6 +581,15 @@ int umq_enqueue(uint64_t umqh, umq_buf_t *qbuf, umq_buf_t **bad_qbuf)
     return ret;
 }
 
+static inline void umq_perf_record_write_dequeue(uint64_t start, bool is_empty)
+{
+    if (is_empty) {
+        umq_perf_record_write(UMQ_PERF_RECORD_DEQUEUE_EMPTY, start);
+        return;
+    }
+    umq_perf_record_write(UMQ_PERF_RECORD_DEQUEUE, start);
+}
+
 umq_buf_t *umq_dequeue(uint64_t umqh)
 {
     uint64_t start_timestamp = umq_perf_get_start_timestamp();
@@ -592,9 +601,9 @@ umq_buf_t *umq_dequeue(uint64_t umqh)
         return NULL;
     }
 
-    umq_buf_t *ret = umq->tp_ops->umq_tp_dequeue(umq->umqh_tp);
-    umq_perf_record_write(UMQ_PERF_RECORD_ENQUEUE, start_timestamp);
-    return ret;
+    umq_buf_t *umq_buf = umq->tp_ops->umq_tp_dequeue(umq->umqh_tp);
+    umq_perf_record_write_dequeue(start_timestamp, umq_buf == NULL);
+    return umq_buf;
 }
 
 void umq_notify(uint64_t umqh)
@@ -610,6 +619,7 @@ void umq_notify(uint64_t umqh)
 
     umq->tp_ops->umq_tp_notify(umq->umqh_tp);
     umq_perf_record_write(UMQ_PERF_RECORD_NOTIFY, start_timestamp);
+    return;
 }
 
 int umq_rearm_interrupt(uint64_t umqh, bool solicated, umq_interrupt_option_t *option)

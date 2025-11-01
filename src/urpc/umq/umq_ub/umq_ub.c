@@ -40,7 +40,6 @@ static void umq_tp_ub_uninit(uint8_t *ctx)
         UMQ_VLOG_ERR("ub_ctx is null\n");
         return;
     }
-    umq_qbuf_pool_uninit();
     umq_ub_unregister_memory_impl(ctx);
     umq_ub_ctx_uninit_impl(ctx);
 }

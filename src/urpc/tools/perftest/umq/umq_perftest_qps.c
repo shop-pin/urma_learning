@@ -58,19 +58,18 @@ static void umq_perftest_server_run_qps_base_interrupt(uint64_t umqh, umq_perfte
     uint64_t start_cycle = get_cycles();
     double cycles_to_units = get_cpu_mhz(false);
     while (!is_perftest_force_quit() && (get_cycles() - start_cycle) / cycles_to_units < ITER_MAX_WAIT_TIME_US) {
-        int32_t nevents = umq_wait_interrupt(umqh, INTERRUPT_MAX_WAIT_TIME_MS, &interrupt_option);
-        if (nevents < 1) {
+        if (umq_wait_interrupt(umqh, INTERRUPT_MAX_WAIT_TIME_MS, &interrupt_option) < 1) {
             LOG_PRINT("umq_wait_interrupt failed\n");
+            continue;
+        }
+        umq_ack_interrupt(umqh, 1, &interrupt_option);
+        if (umq_rearm_interrupt(umqh, false, &interrupt_option) != 0) {
+            LOG_PRINT("umq_rearm_interrupt failed\n");
             continue;
         }
 
         // recv req, release req buf after counting
         recv_buf = umq_dequeue(umqh);
-        umq_ack_interrupt(umqh, (uint32_t)nevents, &interrupt_option);
-        if (umq_rearm_interrupt(umqh, false, &interrupt_option) != 0) {
-            LOG_PRINT("umq_rearm_interrupt failed\n");
-            continue;
-        }
         if (recv_buf == NULL) {
             continue;
         }
@@ -159,6 +158,7 @@ static void umq_perftest_client_run_qps_base(uint64_t umqh, umq_perftest_qps_arg
         // send req
         int32_t ret = -1;
         do {
+            bad_buf = NULL;
             ret = umq_enqueue(umqh, req_buf, &bad_buf);
             if (is_perftest_force_quit()) {
                 return;
@@ -168,8 +168,6 @@ static void umq_perftest_client_run_qps_base(uint64_t umqh, umq_perftest_qps_arg
             }
             if (ret == UMQ_FAIL) {
                 umq_buf_free(req_buf);
-                umq_buf_free(bad_buf);
-                bad_buf = NULL;
                 return;
             }
         } while (ret != UMQ_SUCCESS && !is_perftest_force_quit());
@@ -198,22 +196,23 @@ static void umq_perftest_server_run_qps_pro_interrupt(uint64_t umqh, umq_perftes
     uint64_t start_cycle = get_cycles();
     double cycles_to_units = get_cpu_mhz(false);
     while (!is_perftest_force_quit() && (get_cycles() - start_cycle) / cycles_to_units < ITER_MAX_WAIT_TIME_US) {
-        int32_t nevents = umq_wait_interrupt(umqh, INTERRUPT_MAX_WAIT_TIME_MS, &interrupt_option);
-        if (nevents < 1) {
+        if (umq_wait_interrupt(umqh, INTERRUPT_MAX_WAIT_TIME_MS, &interrupt_option) < 1) {
             LOG_PRINT("umq_wait_interrupt failed\n");
             return;
         }
-        // recv req, release req buf after counting
-        poll_num = umq_poll(umqh, UMQ_IO_RX, polled_buf, UMQ_BATCH_SIZE);
-        if (poll_num < 0) {
-            LOG_PRINT("poll rx failed\n");
-            return;
-        }
-        umq_ack_interrupt(umqh, (uint32_t)nevents, &interrupt_option);
+        umq_ack_interrupt(umqh, 1, &interrupt_option);
         if (umq_rearm_interrupt(umqh, false, &interrupt_option) != 0) {
             LOG_PRINT("server umq_rearm_interrupt failed\n");
             return;
         }
+        // recv req, release req buf after counting
+        do {
+            poll_num = umq_poll(umqh, UMQ_IO_RX, polled_buf, UMQ_BATCH_SIZE);
+            if (poll_num < 0) {
+                LOG_PRINT("poll rx failed\n");
+                return;
+            }
+        } while (poll_num == 0);
 
         require_rx_cnt += (uint32_t)poll_num;
         for (int i = 0; i < poll_num; ++i) {
@@ -323,28 +322,25 @@ static void umq_perftest_client_run_qps_pro_interrupt(uint64_t umqh, umq_perftes
             // send req when tx depth is not fully utilized
             if (umq_post(umqh, req_buf, UMQ_IO_TX, &bad_buf) != UMQ_SUCCESS) {
                 LOG_PRINT("post tx failed\n");
-                umq_buf_free(bad_buf);
-                bad_buf = NULL;
                 goto ERROR;
             }
             can_send_num -= UMQ_BATCH_SIZE;
             umq_notify(umqh);
         }
 
-        int32_t nevents = umq_wait_interrupt(umqh, INTERRUPT_MAX_WAIT_TIME_MS, &interrupt_option);
-        if (nevents < 1) {
+        if (umq_wait_interrupt(umqh, INTERRUPT_MAX_WAIT_TIME_MS, &interrupt_option) < 1) {
             LOG_PRINT("umq_wait_interrupt failed\n");
+            goto ERROR;
+        }
+        umq_ack_interrupt(umqh, 1, &interrupt_option);
+        if (umq_rearm_interrupt(umqh, false, &interrupt_option) != 0) {
+            LOG_PRINT("umq_rearm_interrupt failed\n");
             goto ERROR;
         }
         // poll tx cqe，increase the count
         int ret = umq_poll(umqh, UMQ_IO_TX, polled_buf, UMQ_BATCH_SIZE);
         if (ret < 0) {
             LOG_PRINT("poll tx failed\n");
-            goto ERROR;
-        }
-        umq_ack_interrupt(umqh, (uint32_t)nevents, &interrupt_option);
-        if (umq_rearm_interrupt(umqh, false, &interrupt_option) != 0) {
-            LOG_PRINT("umq_rearm_interrupt failed\n");
             goto ERROR;
         }
 
@@ -383,8 +379,6 @@ static void umq_perftest_client_run_qps_pro_polling(uint64_t umqh, umq_perftest_
             // send req when tx depth is not fully utilized
             if (umq_post(umqh, req_buf, UMQ_IO_TX, &bad_buf) != UMQ_SUCCESS) {
                 LOG_PRINT("post tx failed\n");
-                umq_buf_free(bad_buf);
-                bad_buf = NULL;
                 goto ERROR;
             }
             can_send_num -= UMQ_BATCH_SIZE;

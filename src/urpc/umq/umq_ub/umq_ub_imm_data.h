@@ -19,12 +19,19 @@ extern "C" {
 #define UMQ_UB_IMM_PRIVATE 1
 
 typedef enum umq_ub_imm_type {
-    IMM_TYPE_REVERSE_PULL_MEM,      // used for reverse pull mem in ub plus mode
-    IMM_TYPE_REVERSE_PULL_MEM_FREE, // used for free reverse pull mem in ub plus mode
+    IMM_TYPE_UB_PLUS,               // used for ub plus imm type
     IMM_TYPE_FLOW_CONTROL,          // used for flow control window exchange
     IMM_TYPE_MEM_IMPORT_DONE,       // used for import mem in ub plus mode
     IMM_TYPE_MAX,                   // max type should not exceed 32, for type is 5 bit
 } umq_ub_imm_type_t;
+
+typedef enum umq_ub_plus_imm_sub_type {
+    IMM_TYPE_UB_PLUS_DEFAULT,  //used for default sub type in ub plus mode
+    IMM_TYPE_REVERSE_PULL_MEM,  //used for reverse pull mem in ub plus mode
+    IMM_TYPE_REVERSE_PULL_MEM_FREE,  //used for free reverse pull mem in ub plus mode
+    IMM_TYPE_REVERSE_PULL_MEM_DONE,  //used for reverse pull mem done in ub plus mode
+    IMM_TYPE_UB_PLUS_MAX,
+} umq_ub_plus_imm_sub_type_t;
 
 typedef union umq_ub_imm {
     uint64_t value;
@@ -36,7 +43,8 @@ typedef union umq_ub_imm {
     struct {
         uint64_t umq_private : 1;
         uint64_t type : 5;
-        uint64_t rsvd1 : 10;
+        uint64_t sub_type : 5;
+        uint64_t rsvd1 : 5;
         uint64_t msg_id : 16;
         uint64_t msg_num : 16;
         uint64_t rsvd2 : 16;

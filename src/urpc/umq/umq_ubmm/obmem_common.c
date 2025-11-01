@@ -75,10 +75,10 @@ void *obmem_export_memory(obmem_export_memory_param_t *export_param, uint64_t *h
         goto UNEXPORT_OBMM;
     }
 
-    ptr = mmap(NULL, export_param->len, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0);
+    ptr = mmap(NULL, export_param->len, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
     if (ptr == MAP_FAILED) {
         (void)close(fd);
-        UMQ_VLOG_ERR("alloc_share_memory failed.\n");
+        UMQ_VLOG_ERR("mmap failed, len: %lu errno: %d.\n", export_param->len, errno);
         goto UNEXPORT_OBMM;
     }
 
@@ -149,6 +149,10 @@ void *obmem_import_memory(obmem_import_memory_param_t *import_param, obmem_expor
 
     uint32_t alloc_size = sizeof(struct obmm_mem_desc) + sizeof(struct ub_mem_priv_data);
     desc = (struct obmm_mem_desc *)calloc(1, alloc_size);
+    if (desc == NULL) {
+        UMQ_VLOG_ERR("calloc failed\n");
+        return NULL;
+    }
 
     desc->addr = exp->uba;
     desc->length = exp->size;
@@ -161,6 +165,7 @@ void *obmem_import_memory(obmem_import_memory_param_t *import_param, obmem_expor
 
     struct ub_mem_priv_data *priv = (struct ub_mem_priv_data *)(desc->priv);
     priv->cacheable_flag = 1;
+    priv->ad_tr_ochip = 1;
 
     memid = obmm_import(desc, flags, base_dist, &numa);
     if (memid == OBMM_INVALID_MEMID) {
@@ -176,10 +181,10 @@ void *obmem_import_memory(obmem_import_memory_param_t *import_param, obmem_expor
         goto UNIMPORT_OBMM;
     }
 
-    ptr = mmap(NULL, desc->length, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0);
+    ptr = mmap(NULL, desc->length, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
     if (ptr == MAP_FAILED) {
         (void)close(fd);
-        UMQ_VLOG_ERR("alloc_share_memory failed.\n");
+        UMQ_VLOG_ERR("mmap failed, len: %lu errno: %d.\n", desc->len, errno);
         goto UNIMPORT_OBMM;
     }
 

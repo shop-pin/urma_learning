@@ -121,7 +121,6 @@ typedef struct umq_init_cfg {
     uint16_t headroom_size;         // header size of umq buffer
     bool io_lock_free;              // true: user should ensure thread safety when call io function
     uint8_t trans_info_num;
-    uint16_t order_type;
     uint16_t eid_idx;
     uint16_t cna;
     uint32_t ubmm_eid;
@@ -135,8 +134,6 @@ typedef struct umq_init_cfg {
 #define UMQ_CREATE_FLAG_RX_DEPTH            (1 << 2)        // enable arg rx_depth when create umq
 #define UMQ_CREATE_FLAG_TX_DEPTH            (1 << 3)        // enable arg tx_depth when create umq
 #define UMQ_CREATE_FLAG_QUEUE_MODE          (1 << 4)        // enable arg mode when create umq
-#define UMQ_CREATE_FLAG_IS_LOCAL_IPC        (1 << 5)        // enable arg is_local_ipc when create umq
-#define UMQ_CREATE_FLAG_OWNER               (1 << 6)        // enable arg owner when create umq
 
 typedef struct umq_create_option {
     /*************Required paramenters start*****************/
@@ -153,8 +150,6 @@ typedef struct umq_create_option {
     uint32_t tx_depth;
 
     umq_queue_mode_t mode;      // mode of queue, QUEUE_MODE_POLLING for default
-    bool is_local_ipc;          // whether peer is local ipc
-    bool owner;                 // whether current side is owner of shared memory
     /*************Optional paramenters end*******************/
 } umq_create_option_t;
 
@@ -185,9 +180,8 @@ struct umq_buf {
 
     uint64_t status : 32;                 // status of umq buf
     uint64_t io_direction : 2;            // 0: no direction; 1: tx qbuf; 2: rx qbuf
-    uint64_t reverse_pull_done : 1;
     uint64_t need_import : 1;
-    uint64_t rsvd3 : 28;
+    uint64_t rsvd3 : 29;
 
     uint64_t rsvd4;
 
