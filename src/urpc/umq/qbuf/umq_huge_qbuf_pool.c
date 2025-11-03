@@ -9,7 +9,6 @@
 
 #include "umq_errno.h"
 #include "umq_vlog.h"
-#include "umq_qbuf_pool.h"
 #include "umq_huge_qbuf_pool.h"
 
 #define HUGE_QBUF_POOL_NUM_MAX (64)
@@ -65,8 +64,8 @@ static huge_pool_ctx_t g_huge_pool_ctx = {
 };
 
 static uint32_t g_huge_pool_size[HUGE_QBUF_POOL_SIZE_TYPE_MAX] = {
-    HUGE_QBUF_POOL_SIZE_256K,
-    HUGE_QBUF_POOL_SIZE_8M
+    UMQ_SIZE_256K,
+    UMQ_SIZE_8M
 };
 
 int umq_huge_qbuf_pool_import(uint32_t id)

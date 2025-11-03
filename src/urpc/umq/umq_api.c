@@ -440,8 +440,8 @@ umq_buf_t *umq_buf_alloc(uint32_t request_size, uint32_t request_qbuf_num, uint6
     if (umqh == UMQ_INVALID_HANDLE) {
         umq_buf_list_t head;
         QBUF_LIST_INIT(&head);
-        if (request_size > HUGE_QBUF_POOL_SIZE_8K) {
-            enum HUGE_QBUF_POOL_SIZE_TYPE type = (request_size > HUGE_QBUF_POOL_SIZE_256K) ?
+        if (request_size > UMQ_SIZE_8K) {
+            enum HUGE_QBUF_POOL_SIZE_TYPE type = (request_size > UMQ_SIZE_256K) ?
                 HUGE_QBUF_POOL_SIZE_TYPE_BIG : HUGE_QBUF_POOL_SIZE_TYPE_SMALL;
             if (umq_huge_qbuf_alloc(type, request_size, request_qbuf_num, option, &head) != UMQ_SUCCESS) {
                 return NULL;
