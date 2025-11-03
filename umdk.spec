@@ -57,8 +57,8 @@ Source0       : %{name}-%{version}.tar.gz
 BuildRoot     : %{_buildirootdir}/%{name}-%{version}-build
 buildArch     : x86_64 aarch64
 
-BuildRequires : rpm-build, make, cmake, gcc, gcc-c++, glibc-devel, openssl-devel, glib2-devel, libnl3-devel, kernel-devel, obmm
-Requires: glibc, glib2
+BuildRequires : rpm-build, make, cmake, gcc, gcc-c++, glibc-devel, openssl-devel, glib2-devel, libnl3-devel, kernel-devel, obmm, ummu-devel
+Requires: glibc, glib2, libummu
 %if %{with asan}
 Requires: libasan
 %endif
@@ -71,6 +71,7 @@ A new system interconnect architecture
 
 %if %{build_all} || %{with urma} || %{with urpc}
 %package urma-lib
+Requires:       libummu
 Summary:        Basic URMA libraries of UMDK
 
 %description urma-lib
@@ -275,6 +276,9 @@ tools of ums, contains ums_run
 %if %{with dlock}
     -DBUILD_DLOCK="enable" \
 %endif
+%if %{without udma_stb64_disable}
+    -DUDMA_ST64B="enable" \
+%endif
 
 make %{?_smp_mflags}
 
@@ -296,6 +300,7 @@ make install DESTDIR=%{buildroot}
     %{_libdir}/liburma.so.*
     %{_libdir}/liburma_common.so.*
     %{_libdir}/urma/liburma_ubagg.so.*
+    %{_libdir}/urma/liburma-udma.so
     /etc/rsyslog.d/urma.conf
     /etc/logrotate.d/urma
 
@@ -309,9 +314,12 @@ fi
     %{_libdir}/liburma.so
     %{_libdir}/liburma_common.so
     %{_libdir}/urma/liburma_ubagg.so
+    %{_libdir}/urma/liburma-udma.so
     %dir %{_includedir}/ub/umdk/urma
+    %dir %{_includedir}/ub/umdk/urma/udma
     %{_includedir}/ub/umdk/urma/urma_*.h
     %{_includedir}/ub/umdk/urma/uvs_api.h
+    %{_includedir}/ub/umdk/urma/udma/udma_u_ctl.h
 %if %{with gcov}
     %dir /var/lib/ub/umdk/urma/gcov/%{name}
     /var/lib/ub/umdk/urma/gcov/%{name}/

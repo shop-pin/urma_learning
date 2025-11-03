@@ -64,6 +64,7 @@ add_subdirectory(common)
 add_subdirectory(lib)
 add_subdirectory(examples)
 add_subdirectory(tools)
+add_subdirectory(hw)
 
 # uninstall target
 if(NOT TARGET uninstall)
