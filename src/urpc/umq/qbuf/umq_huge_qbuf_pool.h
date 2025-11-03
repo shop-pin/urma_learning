@@ -15,14 +15,11 @@
 #include "urpc_util.h"
 #include "qbuf_list.h"
 #include "umq_types.h"
+#include "umq_qbuf_pool.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#define HUGE_QBUF_POOL_SIZE_8K (8192)
-#define HUGE_QBUF_POOL_SIZE_256K (262144)
-#define HUGE_QBUF_POOL_SIZE_8M (8388608)
 
 enum HUGE_QBUF_POOL_SIZE_TYPE {
     HUGE_QBUF_POOL_SIZE_TYPE_SMALL, // Corresponding to 256KB size

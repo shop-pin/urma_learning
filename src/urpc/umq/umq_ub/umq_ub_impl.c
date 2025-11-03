@@ -38,7 +38,6 @@
 #define UMQ_MAX_QBUF_NUM 1
 #define UMQ_MAX_TSEG_NUM 255
 #define HUGE_QBUF_BUFFER_INC_BATCH 64
-#define UMQ_DEFAULT_MEMPOOL_ID 0
 #define UMQ_ENABLE_INLINE_LIMIT_SIZE 32
 #define UMQ_INLINE_ENABLE 1
 
@@ -222,7 +221,7 @@ static inline int umq_ub_token_generate(bool enable_token, uint32_t *token)
 static int huge_qbuf_pool_memory_init(uint8_t mempool_id, enum HUGE_QBUF_POOL_SIZE_TYPE type, void **buffer_addr)
 {
     uint32_t total_len = (type == HUGE_QBUF_POOL_SIZE_TYPE_SMALL) ?
-        HUGE_QBUF_POOL_SIZE_256K * HUGE_QBUF_BUFFER_INC_BATCH : HUGE_QBUF_POOL_SIZE_8M * HUGE_QBUF_BUFFER_INC_BATCH;
+        UMQ_SIZE_256K * HUGE_QBUF_BUFFER_INC_BATCH : UMQ_SIZE_8M * HUGE_QBUF_BUFFER_INC_BATCH;
     void *addr = (void *)memalign(UMQ_SIZE_8K, total_len);
     if (addr == NULL) {
         UMQ_VLOG_ERR("memory alloc failed\n");
@@ -283,8 +282,8 @@ static void huge_qbuf_pool_memory_uninit(uint8_t mempool_id, void *buf_addr)
 int32_t umq_ub_huge_qbuf_pool_init(umq_init_cfg_t *cfg)
 {
     huge_qbuf_pool_cfg_t small_cfg = {
-        .total_size = HUGE_QBUF_POOL_SIZE_256K * HUGE_QBUF_BUFFER_INC_BATCH,
-        .data_size = HUGE_QBUF_POOL_SIZE_256K,
+        .total_size = UMQ_SIZE_256K * HUGE_QBUF_BUFFER_INC_BATCH,
+        .data_size = UMQ_SIZE_256K,
         .headroom_size = cfg->headroom_size,
         .mode = cfg->buf_mode,
         .type = HUGE_QBUF_POOL_SIZE_TYPE_SMALL,
@@ -298,8 +297,8 @@ int32_t umq_ub_huge_qbuf_pool_init(umq_init_cfg_t *cfg)
     }
 
     huge_qbuf_pool_cfg_t big_cfg = {
-        .total_size = HUGE_QBUF_POOL_SIZE_8M * HUGE_QBUF_BUFFER_INC_BATCH,
-        .data_size = HUGE_QBUF_POOL_SIZE_8M,
+        .total_size = UMQ_SIZE_8M * HUGE_QBUF_BUFFER_INC_BATCH,
+        .data_size = UMQ_SIZE_8M,
         .headroom_size = cfg->headroom_size,
         .mode = cfg->buf_mode,
         .type = HUGE_QBUF_POOL_SIZE_TYPE_BIG,
@@ -355,7 +354,7 @@ int umq_ub_bind_info_get_impl(uint64_t umqh, uint8_t *bind_info, uint32_t bind_i
     info->type = URMA_JETTY;
     info->token = queue->jetty->jetty_cfg.shared.jfr->jfr_cfg.token_value;
     info->notify_buf = (uint64_t)(uintptr_t)queue->notify_buf->buf_data;
-    (void)memcpy(&info->tseg, queue->dev_ctx->tseg_list[UMQ_DEFAULT_MEMPOOL_ID], sizeof(urma_target_seg_t));
+    (void)memcpy(&info->tseg, queue->dev_ctx->tseg_list[UMQ_QBUF_DEFAULT_MEMPOOL_ID], sizeof(urma_target_seg_t));
     return sizeof(umq_ub_bind_info_t);
 }
 
@@ -560,8 +559,8 @@ int umq_ub_bind_impl(uint64_t umqh, uint8_t *bind_info, uint32_t bind_info_size)
         .token.token = (uint32_t)tseg->user_ctx
     };
     (void)memcpy(&mem_info.ubva, &seg->ubva, sizeof(urma_ubva_t));
-    queue->imported_tseg_list[UMQ_DEFAULT_MEMPOOL_ID] = import_mem(queue->dev_ctx->urma_ctx, &mem_info);
-    if (queue->imported_tseg_list[UMQ_DEFAULT_MEMPOOL_ID] == NULL) {
+    queue->imported_tseg_list[UMQ_QBUF_DEFAULT_MEMPOOL_ID] = import_mem(queue->dev_ctx->urma_ctx, &mem_info);
+    if (queue->imported_tseg_list[UMQ_QBUF_DEFAULT_MEMPOOL_ID] == NULL) {
         return -UMQ_ERR_ENODEV;
     }
 
@@ -679,8 +678,8 @@ int32_t umq_ub_register_memory_impl(uint8_t *ub_ctx, void *buf, uint64_t size)
         .user_ctx = token.token,
         .iova = 0
     };
-    ctx->tseg_list[UMQ_DEFAULT_MEMPOOL_ID] = urma_register_seg(ctx->urma_ctx, &seg_cfg);
-    if (ctx->tseg_list[UMQ_DEFAULT_MEMPOOL_ID] == NULL) {
+    ctx->tseg_list[UMQ_QBUF_DEFAULT_MEMPOOL_ID] = urma_register_seg(ctx->urma_ctx, &seg_cfg);
+    if (ctx->tseg_list[UMQ_QBUF_DEFAULT_MEMPOOL_ID] == NULL) {
         UMQ_VLOG_ERR("fail to register segment\n");
         return -UMQ_ERR_ENODEV;
     }
@@ -1703,7 +1702,7 @@ static int umq_ub_read_done(ub_queue_t *queue, uint16_t msg_id)
                                     .msg_id = msg_id}};
 
     urma_sge_t sge = {
-        .tseg = queue->dev_ctx->tseg_list[UMQ_DEFAULT_MEMPOOL_ID],
+        .tseg = queue->dev_ctx->tseg_list[UMQ_QBUF_DEFAULT_MEMPOOL_ID],
     };
     return umq_ub_send_imm(queue, imm.value, &sge, 0);
 }
@@ -2763,14 +2762,14 @@ int umq_ub_write_imm(uint64_t umqh_tp, uint64_t target_addr, uint32_t len, uint6
     urma_sge_t src_sge = {
         .addr = (uint64_t)(uintptr_t)&src,
         .len = 1,
-        .tseg = queue->dev_ctx->tseg_list[UMQ_DEFAULT_MEMPOOL_ID],
+        .tseg = queue->dev_ctx->tseg_list[UMQ_QBUF_DEFAULT_MEMPOOL_ID],
     };
 
     /* Prepare dst_sge. */
     urma_sge_t dst_sge = {
         .addr = target_addr,
         .len = len,
-        .tseg = queue->imported_tseg_list[UMQ_DEFAULT_MEMPOOL_ID],
+        .tseg = queue->imported_tseg_list[UMQ_QBUF_DEFAULT_MEMPOOL_ID],
     };
 
     /* WRITE to dst_sge. */
