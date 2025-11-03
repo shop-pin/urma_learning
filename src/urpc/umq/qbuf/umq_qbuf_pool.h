@@ -21,9 +21,12 @@
 extern "C" {
 #endif
 
-#define UMQ_SIZE_8K                     (8192)                  // 8K size
-#define UMQ_SIZE_256K                   (262144)                // 256K size
-#define UMQ_SIZE_8M                     (8388608)               // 8M size
+#define UMQ_QBUF_SIZE_POW_SMALL         (13) // right shift operation replaces disvision, equivalent to dividing by 8K
+#define UMQ_QBUF_SIZE_POW_MID           (UMQ_QBUF_SIZE_POW_SMALL + 5) // equivalent to dividing by 256K
+#define UMQ_QBUF_SIZE_POW_BIG           (UMQ_QBUF_SIZE_POW_MID + 5) // equivalent to dividing by 8M
+#define UMQ_SIZE_SMALL                  (1 << UMQ_QBUF_SIZE_POW_SMALL) // 8K size
+#define UMQ_SIZE_MID                    (1 << UMQ_QBUF_SIZE_POW_MID) // 256K size
+#define UMQ_SIZE_BIG                    (1 << UMQ_QBUF_SIZE_POW_BIG) // 8M size
 #define UMQ_BUF_SIZE                    (1000L * 1024 * 1024)   // 1000M size
 #define UMQ_EMPTY_HEADER_COEFFICIENT    16      // if block count is n, there will be n*16 count of empty qbuf header
 #define UMQ_QBUF_DEFAULT_MEMPOOL_ID     (0)
@@ -267,6 +270,11 @@ static ALWAYS_INLINE umq_buf_t *id_to_buf_with_data_split(char *addr, uint32_t i
     return (umq_buf_t *)(addr + id * sizeof(umq_buf_t));
 }
 
+static ALWAYS_INLINE uint32_t buf_to_id_with_data_split(char *addr, char *buf)
+{
+    return (uint32_t)((buf - addr) / sizeof(umq_buf_t));
+}
+
 static ALWAYS_INLINE umq_buf_t *id_to_buf_without_data_split(char *addr, uint32_t id)
 {
     return (umq_buf_t *)(addr + id * sizeof(umq_buf_t));
@@ -297,16 +305,76 @@ static ALWAYS_INLINE void umq_qbuf_alloc_nodata(local_block_pool_t *local_pool, 
     local_pool->buf_cnt_without_data -= num;
 }
 
-static ALWAYS_INLINE void umq_qbuf_alloc_data(local_block_pool_t *local_pool, uint32_t request_size,
-                                              uint32_t num, umq_buf_list_t *list, int32_t headroom_size)
+static ALWAYS_INLINE void umq_qbuf_alloc_data_with_split(local_block_pool_t *local_pool, uint32_t request_size,
+    uint32_t num, umq_buf_list_t *list, int32_t headroom_size)
 {
     uint32_t cnt = 0;
     umq_buf_t *cur_node;
+    int32_t headroom_size_temp = headroom_size;
+    uint32_t total_data_size = request_size;
+    uint32_t remaining_size = request_size;
+    uint32_t max_data_capacity = UMQ_SIZE_SMALL - headroom_size_temp;
+
     QBUF_LIST_FOR_EACH(cur_node, &local_pool->head_with_data) {
-        cur_node->buf_data = floor_to_align(cur_node->buf_data, UMQ_SIZE_8K) + headroom_size;
-        cur_node->headroom_size = headroom_size;
-        cur_node->data_size = request_size;
-        cur_node->total_data_size = request_size;
+        cur_node->buf_data = floor_to_align(cur_node->buf_data, UMQ_SIZE_SMALL) + headroom_size_temp;
+        cur_node->buf_size = UMQ_SIZE_SMALL + (uint32_t)sizeof(umq_buf_t);
+        cur_node->headroom_size = headroom_size_temp;
+        cur_node->total_data_size = total_data_size;
+        cur_node->data_size = remaining_size >= max_data_capacity ? max_data_capacity : remaining_size;
+        remaining_size -= cur_node->data_size;
+        if (remaining_size == 0) {
+            headroom_size_temp = headroom_size;
+            total_data_size = request_size;
+            remaining_size = request_size;
+            max_data_capacity = UMQ_SIZE_SMALL - headroom_size;
+        } else {
+            headroom_size_temp = 0;
+            total_data_size = 0;
+            max_data_capacity = UMQ_SIZE_SMALL;
+        }
+        if (++cnt == num) {
+            break;
+        }
+    }
+
+    umq_buf_t *head = QBUF_LIST_FIRST(&local_pool->head_with_data);
+    // switch head node
+    QBUF_LIST_FIRST(&local_pool->head_with_data) = QBUF_LIST_NEXT(cur_node);
+    QBUF_LIST_NEXT(cur_node) = QBUF_LIST_FIRST(list);
+
+    // set output
+    QBUF_LIST_FIRST(list) = head;
+    local_pool->buf_cnt_with_data -= num;
+}
+
+static ALWAYS_INLINE void umq_qbuf_alloc_data_with_combine(local_block_pool_t *local_pool, uint32_t request_size,
+    uint32_t num, umq_buf_list_t *list, int32_t headroom_size)
+{
+    uint32_t cnt = 0;
+    umq_buf_t *cur_node;
+    int32_t headroom_size_temp = headroom_size;
+    uint32_t total_data_size = request_size;
+    uint32_t remaining_size = request_size;
+    uint32_t max_data_size = UMQ_SIZE_SMALL - sizeof(umq_buf_t);
+    uint32_t max_data_capacity = max_data_size - headroom_size_temp;
+
+    QBUF_LIST_FOR_EACH(cur_node, &local_pool->head_with_data) {
+        cur_node->buf_data = cur_node->data + headroom_size_temp;
+        cur_node->buf_size = UMQ_SIZE_SMALL;
+        cur_node->headroom_size = headroom_size_temp;
+        cur_node->total_data_size = total_data_size;
+        cur_node->data_size = remaining_size >= max_data_capacity ? max_data_capacity : remaining_size;
+        remaining_size -= cur_node->data_size;
+        if (remaining_size == 0) {
+            headroom_size_temp = headroom_size;
+            total_data_size = request_size;
+            remaining_size = request_size;
+            max_data_capacity = max_data_size - headroom_size;
+        } else {
+            headroom_size_temp = 0;
+            total_data_size = 0;
+            max_data_capacity = max_data_size;
+        }
         if (++cnt == num) {
             break;
         }
@@ -342,6 +410,9 @@ static ALWAYS_INLINE int headroom_reset(umq_buf_t *qbuf, uint16_t headroom_size,
     }
     return UMQ_SUCCESS;
 }
+
+uint32_t umq_qbuf_headroom_get(void);
+umq_buf_mode_t umq_qbuf_mode_get(void);
 
 #ifdef __cplusplus
 }

@@ -75,7 +75,7 @@ static pthread_rwlock_t g_register_rwlock = PTHREAD_RWLOCK_INITIALIZER;
 static struct register_list_head g_register_list_head;
 static __thread register_list_node_t g_register_list_node = {0};
 
-static __thread local_qbuf_pool_t g_thread_cache[UMQ_SIZE_8K] = {0};
+static __thread local_qbuf_pool_t g_thread_cache[UMQ_SIZE_SMALL] = {0};
 
 static int release_thread_cache(local_qbuf_pool_t *tls_mgmt_pool)
 {
@@ -120,7 +120,7 @@ static ALWAYS_INLINE void release_thread_cache_array()
     (void)pthread_rwlock_wrlock(&g_register_rwlock);
     LIST_REMOVE(&g_register_list_node, node);
 
-    for (uint32_t id = 0; id < UMQ_SIZE_8K; id++) {
+    for (uint32_t id = 0; id < UMQ_SIZE_SMALL; id++) {
         if (g_thread_cache[id].pool == NULL) {
             continue;
         }
@@ -206,7 +206,7 @@ static ALWAYS_INLINE queue_local_pool_t *get_thread_cache(qbuf_pool_t *pool)
 static void umq_shm_global_split_pool_init(shm_qbuf_pool_cfg_t *cfg, qbuf_pool_t *pool)
 {
     QBUF_LIST_INIT(&pool->block_pool.head_without_data);
-    uint32_t blk_size = round_up(cfg->data_size + cfg->headroom_size, UMQ_SIZE_8K);
+    uint32_t blk_size = UMQ_SIZE_SMALL;
     uint32_t blk_num = cfg->total_size / ((UMQ_EMPTY_HEADER_COEFFICIENT + 1) * (uint64_t)sizeof(umq_buf_t) + blk_size);
 
     pool->block_size = blk_size;
@@ -224,11 +224,11 @@ static void umq_shm_global_split_pool_init(shm_qbuf_pool_cfg_t *cfg, qbuf_pool_t
         umq_buf_t *buf = id_to_buf_with_data_split((char *)pool->header_buffer, i);
         buf->umqh = pool->umqh;
         buf->buf_size = blk_size + (uint32_t)sizeof(umq_buf_t);
-        buf->data_size = blk_size - cfg->headroom_size;
+        buf->data_size = blk_size;
         buf->total_data_size = buf->data_size;
-        buf->headroom_size = cfg->headroom_size;
+        buf->headroom_size = 0;
         buf->token_id = 0;
-        buf->buf_data = pool->data_buffer + i * blk_size + cfg->headroom_size;
+        buf->buf_data = pool->data_buffer + i * blk_size;
         buf->mempool_id = 0;
         buf->need_import = 0;
         (void)memset(buf->qbuf_ext, 0, sizeof(buf->qbuf_ext));
@@ -256,7 +256,7 @@ static void umq_shm_global_split_pool_init(shm_qbuf_pool_cfg_t *cfg, qbuf_pool_t
 
 static void umq_shm_global_combine_pool_init(shm_qbuf_pool_cfg_t *cfg, qbuf_pool_t *pool)
 {
-    uint32_t blk_size = round_up(cfg->data_size + cfg->headroom_size + sizeof(umq_buf_t), UMQ_SIZE_8K);
+    uint32_t blk_size = UMQ_SIZE_SMALL;
     uint32_t blk_num = cfg->total_size / blk_size;
 
     pool->data_buffer = cfg->buf_addr;
@@ -274,11 +274,11 @@ static void umq_shm_global_combine_pool_init(shm_qbuf_pool_cfg_t *cfg, qbuf_pool
         umq_buf_t *buf = id_to_buf_combine((char *)pool->data_buffer, i, pool->block_size);
         buf->umqh = pool->umqh;
         buf->buf_size = blk_size;
-        buf->data_size = blk_size - cfg->headroom_size - (uint32_t)sizeof(umq_buf_t);
+        buf->data_size = blk_size - (uint32_t)sizeof(umq_buf_t);
         buf->total_data_size = buf->data_size;
-        buf->headroom_size = cfg->headroom_size;
+        buf->headroom_size = 0;
         buf->token_id = 0;
-        buf->buf_data = (char *)buf + sizeof(umq_buf_t) + cfg->headroom_size;
+        buf->buf_data = (char *)buf + sizeof(umq_buf_t);
         buf->mempool_id = 0;
         buf->need_import = 0;
         (void)memset(buf->qbuf_ext, 0, sizeof(buf->qbuf_ext));
@@ -400,6 +400,49 @@ static ALWAYS_INLINE void umq_shm_poll_and_fill_global(qbuf_pool_t *pool)
     }
 }
 
+static void umq_shm_qbuf_alloc_data_with_split(local_block_pool_t *local_pool, uint32_t request_size,
+    uint32_t num, umq_buf_list_t *list, int32_t headroom_size, qbuf_pool_t *pool)
+{
+    uint32_t cnt = 0;
+    umq_buf_t *cur_node;
+    int32_t headroom_size_temp = headroom_size;
+    uint32_t total_data_size = request_size;
+    uint32_t remaining_size = request_size;
+    uint32_t max_data_capacity = UMQ_SIZE_SMALL - headroom_size_temp;
+
+    QBUF_LIST_FOR_EACH(cur_node, &local_pool->head_with_data) {
+        uint32_t id = buf_to_id_with_data_split(pool->header_buffer, (char *)cur_node);
+        cur_node->buf_data = pool->data_buffer + id * UMQ_SIZE_SMALL + headroom_size_temp;
+        cur_node->buf_size = UMQ_SIZE_SMALL + (uint32_t)sizeof(umq_buf_t);
+        cur_node->headroom_size = headroom_size_temp;
+        cur_node->total_data_size = total_data_size;
+        cur_node->data_size = remaining_size >= max_data_capacity ? max_data_capacity : remaining_size;
+        remaining_size -= cur_node->data_size;
+        if (remaining_size == 0) {
+            headroom_size_temp = headroom_size;
+            total_data_size = request_size;
+            remaining_size = request_size;
+            max_data_capacity = UMQ_SIZE_SMALL - headroom_size;
+        } else {
+            headroom_size_temp = 0;
+            total_data_size = 0;
+            max_data_capacity = UMQ_SIZE_SMALL;
+        }
+        if (++cnt == num) {
+            break;
+        }
+    }
+
+    umq_buf_t *head = QBUF_LIST_FIRST(&local_pool->head_with_data);
+    // switch head node
+    QBUF_LIST_FIRST(&local_pool->head_with_data) = QBUF_LIST_NEXT(cur_node);
+    QBUF_LIST_NEXT(cur_node) = QBUF_LIST_FIRST(list);
+
+    // set output
+    QBUF_LIST_FIRST(list) = head;
+    local_pool->buf_cnt_with_data -= num;
+}
+
 int umq_shm_qbuf_alloc(
     uint64_t pool, uint32_t request_size, uint32_t num, umq_alloc_option_t *option, umq_buf_list_t *list)
 {
@@ -417,6 +460,17 @@ int umq_shm_qbuf_alloc(
 
     local_block_pool_t *lblk_pool = &local_pool->block_pool;
     global_block_pool_t *gblk_pool = &local_pool->global_pool->block_pool;
+    uint32_t headroom_size =
+        (option != NULL && (option->flag & UMQ_ALLOC_FLAG_HEAD_ROOM_SIZE) != 0) ?
+            option->headroom_size : _pool->headroom_size;
+    uint32_t actual_buf_count;
+
+    if (_pool->mode == UMQ_BUF_SPLIT) {
+        actual_buf_count = num * ((request_size + headroom_size + UMQ_SIZE_SMALL - 1) >> UMQ_QBUF_SIZE_POW_SMALL);
+    } else {
+        uint32_t align_size = UMQ_SIZE_SMALL - sizeof(umq_buf_t);
+        actual_buf_count = num * ((request_size + headroom_size + align_size - 1) / align_size);
+    }
     if (request_size == 0) {
         if (option != NULL && (option->flag & UMQ_ALLOC_FLAG_HEAD_ROOM_SIZE) && option->headroom_size > 0) {
             UMQ_VLOG_ERR("headroom_size not supported when request_size is 0\n");
@@ -429,40 +483,33 @@ int umq_shm_qbuf_alloc(
         }
 
         // fetch from global first, if thread local qbuf is not enough for allocate operation
-        while (lblk_pool->buf_cnt_without_data < num) {
+        while (lblk_pool->buf_cnt_without_data < actual_buf_count) {
             umq_shm_poll_and_fill_global(_pool);
             if (fetch_from_global(gblk_pool, lblk_pool, false, SHM_QBUF_POOL_BATCH_CNT) <= 0) {
                 return -UMQ_ERR_ENOMEM;
             }
         }
 
-        umq_qbuf_alloc_nodata(lblk_pool, num, list);
+        umq_qbuf_alloc_nodata(lblk_pool, actual_buf_count, list);
 
         return UMQ_SUCCESS;
     }
 
-    int32_t headroom_size = _pool->headroom_size;
-    if (option != NULL && (option->flag & UMQ_ALLOC_FLAG_HEAD_ROOM_SIZE) != 0) {
-        headroom_size = option->headroom_size;
-    }
-
-    uint32_t single_size = request_size + headroom_size + (_pool->mode == UMQ_BUF_COMBINE ? sizeof(umq_buf_t) : 0);
-    if (single_size > _pool->block_size) {
-        UMQ_VLOG_ERR("request size[%u] too large, support max size: %u\n", request_size, _pool->block_size);
-        return -UMQ_ERR_EINVAL;
-    }
-
     // fetch from global first, if thread local qbuf is not enough for allocate operation
-    while (lblk_pool->buf_cnt_with_data < num) {
+    while (lblk_pool->buf_cnt_with_data < actual_buf_count) {
         umq_shm_poll_and_fill_global(_pool);
         if (fetch_from_global(gblk_pool, lblk_pool, true, SHM_QBUF_POOL_BATCH_CNT) <= 0) {
             UMQ_VLOG_ERR("fetch from global failed, current size: %u, alloc num: %u\n",
-                lblk_pool->buf_cnt_with_data, num);
+                lblk_pool->buf_cnt_with_data, actual_buf_count);
             return -UMQ_ERR_ENOMEM;
         }
     }
 
-    umq_qbuf_alloc_data(lblk_pool, request_size, num, list, headroom_size);
+    if (_pool->mode == UMQ_BUF_SPLIT) {
+        umq_shm_qbuf_alloc_data_with_split(lblk_pool, request_size, actual_buf_count, list, headroom_size, _pool);
+    } else {
+        umq_qbuf_alloc_data_with_combine(lblk_pool, request_size, actual_buf_count, list, headroom_size);
+    }
 
     return UMQ_SUCCESS;
 }

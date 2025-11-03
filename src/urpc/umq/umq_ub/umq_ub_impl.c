@@ -608,9 +608,9 @@ static inline int umq_ub_token_generate(bool enable_token, uint32_t *token)
 
 static int huge_qbuf_pool_memory_init(uint8_t mempool_id, enum HUGE_QBUF_POOL_SIZE_TYPE type, void **buffer_addr)
 {
-    uint32_t total_len = (type == HUGE_QBUF_POOL_SIZE_TYPE_SMALL) ?
-        UMQ_SIZE_256K * HUGE_QBUF_BUFFER_INC_BATCH : UMQ_SIZE_8M * HUGE_QBUF_BUFFER_INC_BATCH;
-    void *addr = (void *)memalign(UMQ_SIZE_8K, total_len);
+    uint32_t align_size = (type == HUGE_QBUF_POOL_SIZE_TYPE_MID) ? UMQ_SIZE_MID : UMQ_SIZE_BIG;
+    uint32_t total_len = align_size * HUGE_QBUF_BUFFER_INC_BATCH;
+    void *addr = (void *)memalign(align_size, total_len);
     if (addr == NULL) {
         UMQ_VLOG_ERR("memory alloc failed\n");
         return -UMQ_ERR_ENOMEM;
@@ -670,11 +670,11 @@ static void huge_qbuf_pool_memory_uninit(uint8_t mempool_id, void *buf_addr)
 int32_t umq_ub_huge_qbuf_pool_init(umq_init_cfg_t *cfg)
 {
     huge_qbuf_pool_cfg_t small_cfg = {
-        .total_size = UMQ_SIZE_256K * HUGE_QBUF_BUFFER_INC_BATCH,
-        .data_size = UMQ_SIZE_256K,
+        .total_size = UMQ_SIZE_MID * HUGE_QBUF_BUFFER_INC_BATCH,
+        .data_size = UMQ_SIZE_MID,
         .headroom_size = cfg->headroom_size,
         .mode = cfg->buf_mode,
-        .type = HUGE_QBUF_POOL_SIZE_TYPE_SMALL,
+        .type = HUGE_QBUF_POOL_SIZE_TYPE_MID,
         .memory_init_callback = huge_qbuf_pool_memory_init,
         .memory_uninit_callback = huge_qbuf_pool_memory_uninit,
     };
@@ -685,8 +685,8 @@ int32_t umq_ub_huge_qbuf_pool_init(umq_init_cfg_t *cfg)
     }
 
     huge_qbuf_pool_cfg_t big_cfg = {
-        .total_size = UMQ_SIZE_8M * HUGE_QBUF_BUFFER_INC_BATCH,
-        .data_size = UMQ_SIZE_8M,
+        .total_size = UMQ_SIZE_BIG * HUGE_QBUF_BUFFER_INC_BATCH,
+        .data_size = UMQ_SIZE_BIG,
         .headroom_size = cfg->headroom_size,
         .mode = cfg->buf_mode,
         .type = HUGE_QBUF_POOL_SIZE_TYPE_BIG,
@@ -1010,22 +1010,20 @@ int umq_ub_bind_impl(uint64_t umqh, uint8_t *bind_info, uint32_t bind_info_size)
     }
     // if mode is UB, post rx here. if mode is UB PRO, no need to post rx
     if ((queue->dev_ctx->feature & UMQ_FEATURE_API_PRO) == 0) {
-        umq_buf_list_t head;
         uint32_t require_rx_count = queue->rx_depth;
         uint32_t cur_batch_count = 0;
         do {
             cur_batch_count = require_rx_count > UMQ_POST_POLL_BATCH ? UMQ_POST_POLL_BATCH : require_rx_count;
-            QBUF_LIST_INIT(&head);
-            if (umq_qbuf_alloc(queue->rx_buf_size, cur_batch_count, NULL, &head) != UMQ_SUCCESS) {
+            umq_buf_t *qbuf = umq_buf_alloc(queue->rx_buf_size, cur_batch_count, 0, NULL);
+            if (qbuf == NULL) {
                 UMQ_VLOG_ERR("alloc rx failed");
                 goto UNIMPORT_JETTY;
             }
 
             umq_buf_t *bad_buf = NULL;
-            if (umq_ub_post_rx(umqh, QBUF_LIST_FIRST(&head), &bad_buf) != UMQ_SUCCESS) {
+            if (umq_ub_post_rx(umqh, qbuf, &bad_buf) != UMQ_SUCCESS) {
                 UMQ_VLOG_ERR("post rx failed");
-                QBUF_LIST_FIRST(&head) = bad_buf;
-                umq_qbuf_free(&head);
+                umq_buf_free(bad_buf);
                 goto UNIMPORT_JETTY;
             }
             require_rx_count -= cur_batch_count;
@@ -1699,7 +1697,7 @@ void ubmm_fill_big_data_ref_sge(uint64_t umqh_tp, ub_ref_sge_t *ref_sge,
 static int umq_ub_send_big_data(ub_queue_t *queue, umq_buf_t **buffer)
 {
     // apply for one to avoid memory leak
-    umq_buf_t *send_buf = umq_buf_alloc(UMQ_SIZE_8K, UMQ_MAX_QBUF_NUM, UMQ_INVALID_HANDLE, NULL);
+    umq_buf_t *send_buf = umq_buf_alloc(UMQ_SIZE_SMALL, UMQ_MAX_QBUF_NUM, UMQ_INVALID_HANDLE, NULL);
     if (send_buf == NULL) {
         UMQ_LIMIT_VLOG_ERR("umq malloc failed\n");
         return -UMQ_ERR_ENOMEM;
@@ -1719,7 +1717,7 @@ static int umq_ub_send_big_data(ub_queue_t *queue, umq_buf_t **buffer)
     ub_import_mempool_info_t import_mempool_info[UMQ_MAX_TSEG_NUM];
     uint32_t rest_size = (*buffer)->total_data_size;
     int32_t buf_index = 0;
-    uint16_t ref_sge_num = (UMQ_SIZE_8K - sizeof(umq_imm_head_t)) / sizeof(ub_ref_sge_t);
+    uint16_t ref_sge_num = (UMQ_SIZE_SMALL - sizeof(umq_imm_head_t)) / sizeof(ub_ref_sge_t);
     urma_sge_t sge;
     while ((*buffer) && rest_size != 0) {
         if (rest_size < (*buffer)->data_size) {
@@ -1742,7 +1740,7 @@ static int umq_ub_send_big_data(ub_queue_t *queue, umq_buf_t **buffer)
 
     if (umq_imm_head->type == IMM_PROTOCAL_TYPE_IMPORT_MEM) {
         if ((sizeof(umq_imm_head_t) + sizeof(ub_ref_sge_t) * buf_index +
-            sizeof(ub_import_mempool_info_t) * umq_imm_head->mempool_num) > (UMQ_SIZE_8K * UMQ_MAX_QBUF_NUM)) {
+            sizeof(ub_import_mempool_info_t) * umq_imm_head->mempool_num) > (UMQ_SIZE_SMALL * UMQ_MAX_QBUF_NUM)) {
             UMQ_LIMIT_VLOG_ERR("import mempool info is not enough\n");
             goto FREE_BUF;
         }
@@ -2089,9 +2087,9 @@ static umq_buf_t *umq_ub_read_ctx_create(
 
     if (umq_imm_head->mem_interval != UMQ_SIZE_INVALID_INTERAL) {
         static const uint32_t read_alloc_mem_size[UMQ_SIZE_INTERAL_MAX] = {
-            [UMQ_SIZE_0K_8K_INTERAL] = UMQ_SIZE_8K,
-            [UMQ_SIZE_8K_256K_INTERAL] = UMQ_SIZE_256K,
-            [UMQ_SIZE_256K_8M_INTERAL] = UMQ_SIZE_8M,
+            [UMQ_SIZE_0K_SMALL_INTERAL] = UMQ_SIZE_SMALL,
+            [UMQ_SIZE_SMALL_MID_INTERAL] = UMQ_SIZE_MID,
+            [UMQ_SIZE_MID_BIG_INTERAL] = UMQ_SIZE_BIG,
         };
         user_ctx->dst_buf =
             umq_buf_alloc(read_alloc_mem_size[umq_imm_head->mem_interval], buf_num, UMQ_INVALID_HANDLE, NULL);

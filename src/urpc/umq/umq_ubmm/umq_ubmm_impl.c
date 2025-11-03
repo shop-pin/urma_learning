@@ -237,13 +237,13 @@ uint64_t umq_ubmm_create_impl(uint64_t umqh, uint8_t *ubmm_ctx, umq_create_optio
 
     // data zone size calculate
     uint32_t header_multiply = 1 + UMQ_EMPTY_HEADER_COEFFICIENT;
-    uint64_t data_zone_size = tp->local_ring.tx_depth * (UMQ_SIZE_8K + sizeof(umq_buf_t) * header_multiply);
+    uint64_t data_zone_size = tp->local_ring.tx_depth * (UMQ_SIZE_SMALL + sizeof(umq_buf_t) * header_multiply);
 
     // transmit queue and manage queue size calculate
     uint64_t post_data_size = sizeof(uint32_t) + sizeof(uint64_t);
     uint64_t tx_post_queue_size = sizeof(shm_ring_hdr_t) + tp->local_ring.tx_depth * post_data_size;
     uint64_t rx_post_queue_size = sizeof(shm_ring_hdr_t) + tp->local_ring.tx_depth * post_data_size * header_multiply;
-    uint64_t rounded_post_size = round_up(tx_post_queue_size + rx_post_queue_size, UMQ_SIZE_8K);
+    uint64_t rounded_post_size = round_up(tx_post_queue_size + rx_post_queue_size, UMQ_SIZE_SMALL);
 
     uint64_t total_size = round_up(data_zone_size + rounded_post_size, UMQ_SIZE_4M);
     obmem_export_memory_param_t export_param = {
@@ -284,7 +284,7 @@ uint64_t umq_ubmm_create_impl(uint64_t umqh, uint8_t *ubmm_ctx, umq_create_optio
     shm_qbuf_pool_cfg_t sm_qbuf_pool_cfg = {
         .buf_addr = tp->local_ring.addr + tp->local_ring.transmit_queue_buf_size,
         .total_size = total_size - tp->local_ring.transmit_queue_buf_size,
-        .data_size = UMQ_SIZE_8K,
+        .data_size = UMQ_SIZE_SMALL,
         .headroom_size = global_pool_cfg.headroom_size,
         .mode = global_pool_cfg.mode,
         .type = SHM_QBUF_POOL_TYPE_LOCAL,
@@ -394,7 +394,7 @@ int32_t umq_ubmm_bind_info_get_impl(uint64_t umqh_tp, uint8_t *bind_info, uint32
 
     qbuf_pool_cfg_t global_pool_cfg;
     umq_qbuf_config_get(&global_pool_cfg);
-    tmp_info->shm_qbuf_pool_data_size = UMQ_SIZE_8K;
+    tmp_info->shm_qbuf_pool_data_size = UMQ_SIZE_SMALL;
     tmp_info->shm_qbuf_pool_headroom_size = global_pool_cfg.headroom_size;
     tmp_info->shm_qbuf_pool_mode = global_pool_cfg.mode;
     tmp_info->peer_eid = tp->ubmm_ctx->ubmm_eid;
@@ -481,7 +481,7 @@ int32_t umq_ubmm_bind_impl(uint64_t umqh_tp, uint8_t *bind_info, uint32_t bind_i
     shm_qbuf_pool_cfg_t sm_qbuf_pool_cfg = {
         .buf_addr = ctx->remote_ring.addr + tmp_info->transmit_queue_buf_size,
         .total_size = tmp_info->size - tmp_info->transmit_queue_buf_size,
-        .data_size = UMQ_SIZE_8K,
+        .data_size = UMQ_SIZE_SMALL,
         .headroom_size = tmp_info->shm_qbuf_pool_headroom_size,
         .mode = tmp_info->shm_qbuf_pool_mode,
         .type = SHM_QBUF_POOL_TYPE_REMOTE,
@@ -630,14 +630,14 @@ static ALWAYS_INLINE int enqueue_data(uint64_t umqh_tp, uint64_t *offset, uint32
 
 static ALWAYS_INLINE umq_buf_t *umq_prepare_rendezvous_data(umq_ubmm_info_t *tp, umq_buf_t *qbuf, uint16_t *msg_id)
 {
-    umq_buf_t *send_buf = umq_buf_alloc(UMQ_SIZE_8K, 1, tp->umqh, NULL);
+    umq_buf_t *send_buf = umq_buf_alloc(UMQ_SIZE_SMALL, 1, tp->umqh, NULL);
     if (send_buf == NULL) {
         UMQ_LIMIT_VLOG_ERR("alloc rendezvoud buf failed\n");
         return NULL;
     }
 
     uint32_t max_ref_sge_num =
-        (UMQ_SIZE_8K - sizeof(umq_ubmm_ref_sge_info_t) - sizeof(umq_imm_head_t)) / sizeof(ub_ref_sge_t);
+        (UMQ_SIZE_SMALL - sizeof(umq_ubmm_ref_sge_info_t) - sizeof(umq_imm_head_t)) / sizeof(ub_ref_sge_t);
 
     umq_ubmm_ref_sge_info_t *ref_sge_info = (umq_ubmm_ref_sge_info_t *)(uintptr_t)send_buf->buf_data;
     umq_imm_head_t *umq_imm_head = (umq_imm_head_t *)(uintptr_t)ref_sge_info->ub_ref_info;
@@ -663,7 +663,7 @@ static ALWAYS_INLINE umq_buf_t *umq_prepare_rendezvous_data(umq_ubmm_info_t *tp,
 
     if (umq_imm_head->type == IMM_PROTOCAL_TYPE_IMPORT_MEM) {
         if ((sizeof(umq_imm_head_t) + sizeof(ub_ref_sge_t) * idx +
-            sizeof(ub_import_mempool_info_t) * umq_imm_head->mempool_num) > UMQ_SIZE_8K) {
+            sizeof(ub_import_mempool_info_t) * umq_imm_head->mempool_num) > UMQ_SIZE_SMALL) {
             UMQ_LIMIT_VLOG_ERR("import mempool info is not enough\n");
             umq_buf_free(send_buf);
             return NULL;

@@ -262,7 +262,7 @@ int umq_init(umq_init_cfg_t *cfg)
         return -UMQ_ERR_EINVAL;
     }
 
-    g_buffer_addr = (void *)memalign(UMQ_SIZE_8K, g_total_len);
+    g_buffer_addr = (void *)memalign(UMQ_SIZE_SMALL, g_total_len);
     if (g_buffer_addr == NULL) {
         UMQ_VLOG_ERR("memory alloc failed\n");
         return -UMQ_ERR_ENOMEM;
@@ -312,7 +312,7 @@ int umq_init(umq_init_cfg_t *cfg)
     qbuf_pool_cfg_t qbuf_cfg = {
         .buf_addr = g_buffer_addr,
         .total_size = g_total_len,
-        .data_size = UMQ_SIZE_8K,
+        .data_size = UMQ_SIZE_SMALL,
         .headroom_size = cfg->headroom_size,
         .mode = cfg->buf_mode,
     };
@@ -446,17 +446,20 @@ umq_buf_t *umq_buf_alloc(uint32_t request_size, uint32_t request_qbuf_num, uint6
         return NULL;
     }
 
+    uint32_t headroom_size = umq_qbuf_headroom_get();
+    umq_buf_mode_t mode = umq_qbuf_mode_get();
+    uint32_t factor = (mode == UMQ_BUF_SPLIT) ? 0 : sizeof(umq_buf_t);
     if (umqh == UMQ_INVALID_HANDLE) {
         umq_buf_list_t head;
         QBUF_LIST_INIT(&head);
-        if (request_size > UMQ_SIZE_8K) {
-            enum HUGE_QBUF_POOL_SIZE_TYPE type = (request_size > UMQ_SIZE_256K) ?
-                HUGE_QBUF_POOL_SIZE_TYPE_BIG : HUGE_QBUF_POOL_SIZE_TYPE_SMALL;
-            if (umq_huge_qbuf_alloc(type, request_size, request_qbuf_num, option, &head) != UMQ_SUCCESS) {
+        if (request_size + headroom_size + factor < UMQ_SIZE_MID) {
+            if (umq_qbuf_alloc(request_size, request_qbuf_num, option, &head) != UMQ_SUCCESS) {
                 return NULL;
             }
         } else {
-            if (umq_qbuf_alloc(request_size, request_qbuf_num, option, &head) != UMQ_SUCCESS) {
+            enum HUGE_QBUF_POOL_SIZE_TYPE type = (request_size + headroom_size + factor >= UMQ_SIZE_BIG) ?
+                HUGE_QBUF_POOL_SIZE_TYPE_BIG : HUGE_QBUF_POOL_SIZE_TYPE_MID;
+            if (umq_huge_qbuf_alloc(type, request_size, request_qbuf_num, option, &head) != UMQ_SUCCESS) {
                 return NULL;
             }
         }

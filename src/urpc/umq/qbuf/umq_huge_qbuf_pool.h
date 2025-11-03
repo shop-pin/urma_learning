@@ -22,8 +22,8 @@ extern "C" {
 #endif
 
 enum HUGE_QBUF_POOL_SIZE_TYPE {
-    HUGE_QBUF_POOL_SIZE_TYPE_SMALL, // Corresponding to 256KB size
-    HUGE_QBUF_POOL_SIZE_TYPE_BIG,   // Corresponding to 8MB size
+    HUGE_QBUF_POOL_SIZE_TYPE_MID, // Corresponding to 256KB size
+    HUGE_QBUF_POOL_SIZE_TYPE_BIG, // Corresponding to 8MB size
     HUGE_QBUF_POOL_SIZE_TYPE_MAX,
 };
 
