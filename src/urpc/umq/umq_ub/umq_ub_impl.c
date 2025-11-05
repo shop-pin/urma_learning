@@ -567,7 +567,7 @@ int umq_ub_bind_impl(uint64_t umqh, uint8_t *bind_info, uint32_t bind_info_size)
     ub_bind_ctx_t *ctx = (ub_bind_ctx_t *)calloc(1, sizeof(ub_bind_ctx_t));
     if (ctx == NULL) {
         UMQ_VLOG_ERR("bind ctx calloc failed\n");
-        return -UMQ_ERR_ENOMEM;
+        goto UNIMPORT_SEG;
     }
     ctx->remote_notify_addr = info->notify_buf;
     urma_rjetty_t rjetty = {
@@ -620,6 +620,10 @@ UNIMPORT_JETTY:
 
 FREE_CTX:
     free(ctx);
+
+UNIMPORT_SEG:
+    (void)urma_unimport_seg(queue->imported_tseg_list[UMQ_QBUF_DEFAULT_MEMPOOL_ID]);
+    queue->imported_tseg_list[UMQ_QBUF_DEFAULT_MEMPOOL_ID] = NULL;
     return UMQ_FAIL;
 }
 
@@ -2061,6 +2065,8 @@ int umq_ub_unbind_impl(uint64_t umqh)
     urma_target_jetty_t *tjetty = bind_ctx->tjetty;
     (void)urma_unbind_jetty(queue->jetty);
     (void)urma_unimport_jetty(tjetty);
+    (void)urma_unimport_seg(queue->imported_tseg_list[UMQ_QBUF_DEFAULT_MEMPOOL_ID]);
+    queue->imported_tseg_list[UMQ_QBUF_DEFAULT_MEMPOOL_ID] = NULL;
     umq_modify_ubq_to_err(queue);
 
     if ((queue->dev_ctx->feature & UMQ_FEATURE_API_PRO) == 0) {

@@ -639,7 +639,11 @@ int umq_shm_qbuf_enqueue(umq_buf_t *qbuf, uint64_t umq, uint64_t pool, bool rend
         qbuf_offset |= UMQ_RENDEZVOUS_FLAG;
     }
 
-    return enqueue(umq, &qbuf_offset, 1);
+    int ret = enqueue(umq, &qbuf_offset, 1);
+    if (ret != UMQ_SUCCESS) {
+        umq_shm_offset_to_qbuf_pointer((qbuf_offset & UMQ_OFFSET_DATA_BITS), pool, umq);
+    }
+    return ret;
 }
 
 umq_buf_t *umq_shm_qbuf_dequeue(uint64_t umq, uint64_t umq_tp, uint64_t pool, bool *rendezvous,

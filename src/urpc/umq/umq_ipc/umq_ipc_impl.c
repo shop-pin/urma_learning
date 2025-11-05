@@ -321,6 +321,7 @@ int32_t umq_ipc_destroy_impl(uint64_t umqh_tp)
     }
 
     umq_ipc_unmap_memory(&tp->local_ring);
+    free(tp);
     umq_dec_ref(g_ipc_ctx->io_lock_free, &g_ipc_ctx->ref_cnt, 1);
     UMQ_VLOG_DEBUG("umqh destroyed");
     return UMQ_SUCCESS;
@@ -448,6 +449,7 @@ int32_t umq_ipc_unbind_impl(uint64_t umqh_tp)
     msg_ring_destroy(tp->bind_ctx->remote_msg_ring);
     umq_ipc_unmap_memory(&tp->bind_ctx->remote_ring);
 
+    umq_shm_global_pool_uninit(tp->bind_ctx->qbuf_pool_handle);
     free(tp->bind_ctx);
     tp->bind_ctx = NULL;
     UMQ_VLOG_DEBUG("unbind succeed\n");

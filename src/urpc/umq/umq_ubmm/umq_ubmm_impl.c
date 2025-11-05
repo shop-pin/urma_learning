@@ -349,6 +349,7 @@ int32_t umq_ubmm_destroy_impl(uint64_t umqh_tp)
         return -UMQ_ERR_ENODEV;
     }
 
+    msg_ring_destroy(tp->local_msg_ring);
     // release ub resource first
     umq_buf_free(tp->notify_buf);
     umq_shm_global_pool_uninit(tp->qbuf_pool_handle);
@@ -520,6 +521,7 @@ int32_t umq_ubmm_unbind_impl(uint64_t umqh_tp)
         return -UMQ_ERR_EAGAIN;
     }
 
+    msg_ring_destroy(tp->bind_ctx->remote_msg_ring);
     umq_shm_global_pool_uninit(tp->bind_ctx->qbuf_pool_handle);
     obmem_release_import_memory(tp->bind_ctx->remote_ring.handle, tp->bind_ctx->remote_ring.addr,
                                 tp->bind_ctx->remote_ring.ubmm_export.size);
