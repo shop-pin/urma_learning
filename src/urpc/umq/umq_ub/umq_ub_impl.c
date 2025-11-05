@@ -33,7 +33,7 @@
 #define UMQ_MAX_SGE_NUM 16
 #define UMQ_REV_PULL_DONE 1
 #define UMQ_FLUSH_MAX_RETRY_TIMES 10000
-#define UMQ_MAX_ID_NUM (2 ^ 16)
+#define UMQ_MAX_ID_NUM (1 << 16)
 #define UMQ_CONTINUE_FLAG 1
 #define UMQ_MAX_QBUF_NUM 1
 #define UMQ_MAX_TSEG_NUM 255
