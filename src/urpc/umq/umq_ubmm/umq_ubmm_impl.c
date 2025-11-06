@@ -740,7 +740,7 @@ umq_buf_t *umq_ubmm_plus_dequeue_impl(uint64_t umqh_tp)
     }
 
     // try to dequeue ub to get read data and handle notify
-    umq_buf_t *buf = umq_ub_dequeue_impl(tp->ub_handle);
+    umq_buf_t *buf = umq_ub_dequeue_impl_plus(tp->ub_handle);
     if (buf == NULL) {
         UMQ_LIMIT_VLOG_DEBUG("ub dequeue return nothing\n");
     }
@@ -787,7 +787,8 @@ void umq_ubmm_notify_impl(uint64_t umqh_tp)
         return;
     }
 
-    umq_ub_write_imm(tp->ub_handle, tp->bind_ctx->remote_notify_addr, 1, 0);
+    umq_ub_imm_t imm = { .bs = { .umq_private = UMQ_UB_IMM_PRIVATE, .type = IMM_TYPE_NOTIFY} };
+    umq_ub_write_imm(tp->ub_handle, tp->bind_ctx->remote_notify_addr, 1, imm.value);
 }
 
 int umq_ubmm_rearm_interrupt_impl(uint64_t umqh_tp, bool solicated, umq_interrupt_option_t *option)

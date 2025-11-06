@@ -3176,6 +3176,9 @@ static int process_write_imm(umq_buf_t *rx_buf, umq_ub_imm_t imm, uint64_t umqh)
         }
         ret = UMQ_CONTINUE_FLAG;
         umq_buf_free(rx_buf);
+    } else if (imm.bs.type == IMM_TYPE_NOTIFY) {
+        ret = UMQ_CONTINUE_FLAG;
+        umq_buf_free(rx_buf);
     }
     return ret;
 }
