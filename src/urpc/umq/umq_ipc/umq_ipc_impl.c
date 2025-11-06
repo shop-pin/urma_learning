@@ -256,7 +256,7 @@ uint64_t umq_ipc_create_impl(uint64_t umqh, uint8_t *ipc_ctx, umq_create_option_
     tp->local_msg_ring = msg_ring_create("", 0, &ipc_option);
     if (tp->local_msg_ring == NULL) {
         UMQ_VLOG_ERR("ipc create failed\n");
-        goto FREE_TP;
+        goto UNMAP;
     }
 
     tp->umq_id = util_id_allocator_get(&g_umq_id_allocator);
@@ -291,6 +291,9 @@ uint64_t umq_ipc_create_impl(uint64_t umqh, uint8_t *ipc_ctx, umq_create_option_
 RELEASE_ID:
     util_id_allocator_release(&g_umq_id_allocator, tp->umq_id);
     msg_ring_destroy(tp->local_msg_ring);
+
+UNMAP:
+    umq_ipc_unmap_memory(&tp->local_ring);
 
 FREE_TP:
     free(tp);
@@ -489,6 +492,11 @@ static ALWAYS_INLINE int enqueue_data(uint64_t umqh_tp, uint64_t *offset, uint32
 int umq_ipc_enqueue_impl(uint64_t umqh_tp, umq_buf_t *qbuf, umq_buf_t **bad_qbuf)
 {
     umq_ipc_info_t *tp = (umq_ipc_info_t *)(uintptr_t)umqh_tp;
+    if (tp->bind_ctx == NULL) {
+        UMQ_LIMIT_VLOG_ERR("umq has not been binded\n");
+        return -UMQ_ERR_ENODEV;
+    }
+
     int ret = umq_shm_qbuf_enqueue(qbuf, umqh_tp, tp->qbuf_pool_handle, false, enqueue_data);
     if (ret != UMQ_SUCCESS) {
         *bad_qbuf = qbuf;
