@@ -479,6 +479,7 @@ PUT_CUR_RX_CTX:
 PUT_ALL_RX_CTX:
     // put rx buf in recv wr
     if (wr_index > 0) {
+        (recv_wr_ptr - 1)->next = NULL;
         *bad_qbuf = ((rx_buf_ctx_t *)(uintptr_t)recv_wr->user_ctx)->buffer;
         process_bad_wr(queue, recv_wr, buffer);
     } else {
