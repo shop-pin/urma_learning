@@ -435,7 +435,7 @@ typedef struct queue_ops {
         queue_t *r_queue, provider_t *provider, queue_import_async_info_t *async_info, int timeout);
     int (*unimport_remote_queue_async)(queue_t *r_queue);
     int (*bind_queue)(queue_t *l_queue, queue_t *r_queue);
-    void (*unbind_queue)(queue_t *l_queue);
+    int (*unbind_queue)(queue_t *l_queue);
     bool (*is_same_queue)(queue_t *queue, void *info, queue_authn_mode_t mode);
     int (*update_queue_status)(queue_t *r_queue, queue_import_async_info_t *async_info);
     int (*modify_queue)(queue_t *l_queue, urpc_queue_status_t status);

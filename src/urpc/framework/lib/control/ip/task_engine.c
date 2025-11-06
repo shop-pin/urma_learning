@@ -2813,10 +2813,8 @@ static void queue_pair_rollback(void *task)
     queue_pair_ctx_t *ctx = CONTAINER_OF_FIELD(task, queue_pair_ctx_t, base_task);
     queue_local_t *local_q = (queue_local_t *)(uintptr_t)ctx->l_q;
     if (local_q != NULL && local_q->is_binded == URPC_TRUE) {
-        local_q->queue.ops->unbind_queue(&local_q->queue);
-        local_q->is_binded = URPC_FALSE;
+        (void)local_q->queue.ops->unbind_queue(&local_q->queue);
     }
-    return;
 }
 
 static void bind_info_recv_input_set(void *buffer, urpc_async_task_ctx_t *task)
@@ -2977,7 +2975,6 @@ int client_queue_bind(urpc_async_task_ctx_t *task)
             "local id %u, remote id %u\n", local_q->qid, remote_q->qid);
         return URPC_FAIL;
     }
-    local_q->is_binded = URPC_TRUE;
     return URPC_SUCCESS;
 }
 
@@ -2994,8 +2991,10 @@ static int client_unbind(urpc_async_task_ctx_t *task)
         return URPC_FAIL;
     }
     queue_local_t *local_q = (queue_local_t *)(uintptr_t)ctx->l_q;
-    local_q->queue.ops->unbind_queue(&local_q->queue);
-    local_q->is_binded = URPC_FALSE;
+    if (local_q->queue.ops->unbind_queue(&local_q->queue) != URPC_SUCCESS) {
+        URPC_LIB_LOG_ERR("unbind queue failed, local id %u\n", local_q->qid);
+        return URPC_FAIL;
+    }
     return URPC_SUCCESS;
 }
 
@@ -3078,7 +3077,6 @@ int server_queue_bind(urpc_async_task_ctx_t *task)
     queue_bind_info_t *l_bind_info = &ctx->l_bind_info;
     l_bind_info->l_qid = local_q->qid;
     l_bind_info->r_qid = remote_q->qid;
-    local_q->is_binded = URPC_TRUE;
     (void)pthread_rwlock_unlock(&server_channel->rw_lock);
 
     return URPC_SUCCESS;
@@ -3095,11 +3093,13 @@ static int server_queue_unbind(urpc_async_task_ctx_t *task)
         return URPC_FAIL;
     }
 
-    local_q->queue.ops->unbind_queue(&local_q->queue);
+    if (local_q->queue.ops->unbind_queue(&local_q->queue) != URPC_SUCCESS) {
+        URPC_LIB_LOG_ERR("process unbind failed, local id %u\n", local_q->qid);
+        return URPC_FAIL;
+    }
     queue_bind_info_t *l_bind_info = &ctx->l_bind_info;
     l_bind_info->l_qid = local_q->qid;
     l_bind_info->r_qid = r_bind_info->l_qid;
-    local_q->is_binded = URPC_FALSE;
 
     return URPC_SUCCESS;
 }

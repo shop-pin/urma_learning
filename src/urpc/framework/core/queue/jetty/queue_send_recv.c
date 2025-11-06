@@ -320,13 +320,19 @@ static int send_recv_bind_queue(queue_t *l_queue, queue_t *r_queue)
     }
 
     local_queue->local_q.remote_jetty_id = imported_queue->tjetty->id;
+    local_queue->local_q.is_binded = URPC_TRUE;
     return URPC_SUCCESS;
 }
 
-static void send_recv_unbind_queue(queue_t *l_queue)
+static int send_recv_unbind_queue(queue_t *l_queue)
 {
     send_recv_queue_local_t *local_queue = (send_recv_queue_local_t *)(uintptr_t)l_queue;
-    (void)urma_unbind_jetty(local_queue->jetty);
+    if (urma_unbind_jetty(local_queue->jetty) != URMA_SUCCESS) {
+        URPC_LIB_LOG_ERR("unadvise jetty failed\n");
+        return URPC_FAIL;
+    }
+    local_queue->local_q.is_binded = URPC_FALSE;
+    return URPC_SUCCESS;
 }
 
 static ALWAYS_INLINE int send_recv_poll_tx(send_recv_queue_local_t *local_queue, queue_msg_t *msg, int cr_cnt)
