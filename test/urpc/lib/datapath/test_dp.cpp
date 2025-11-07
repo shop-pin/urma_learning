@@ -279,7 +279,7 @@ TEST_F(DatapathTest, TestServerPoll)
     urpc_queue_rx_post(qh, &sge, 1);
     // 2. mock poll one tx cqe and one ack rx cqe
     int ret = urpc_func_poll(URPC_INVALID_ID_U32, &poll_option, msg, 2);
-    ASSERT_EQ(ret, 1);
+    ASSERT_EQ(ret, 2);
     ASSERT_EQ(msg[0].event, POLL_EVENT_REQ_RSPED);
     URPC_SLIST_REMOVE(&channel->l_queue_nodes_head, &node, queue_node, node);
     channel->l_qnum = 0;
@@ -357,7 +357,7 @@ TEST_F(DatapathTest, TestPollChannel)
     // 2. mock poll one tx cqe and one ack rx cqe
     poll_option.urpc_qh = qh;
     ret = urpc_func_poll(chid, &poll_option, msg, 2);
-    ASSERT_EQ(ret, 1);
+    ASSERT_EQ(ret, 2);
     ASSERT_EQ(msg[0].event, POLL_EVENT_REQ_RSPED);
 
     URPC_SLIST_REMOVE(&channel->l_queue_nodes_head, &node, queue_node, node);

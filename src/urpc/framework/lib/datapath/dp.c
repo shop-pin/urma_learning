@@ -1579,6 +1579,24 @@ static ALWAYS_INLINE int process_rx_error_msg(
     return 1;
 }
 
+static ALWAYS_INLINE int process_rx_protocol_error_msg(
+    queue_t *queue, queue_msg_t *q_msg, urpc_poll_msg_t *msg, uint32_t urpc_chid)
+{
+    struct rx_user_ctx *ctx = (struct rx_user_ctx *)q_msg->data;
+    msg->event = POLL_EVENT_ERR;
+    msg->event_err.err_event = POLL_ERR_EVENT_PROTOCOL_ERR;
+    msg->event_err.args = ctx->sges;
+    msg->event_err.args_sge_num = ctx->sge_num;
+    msg->event_err.err_code = q_msg->status;
+    msg->event_err.urpc_qh = (uint64_t)(uintptr_t)queue;
+    msg->event_err.urpc_chid = urpc_chid;
+    rx_user_ctx_put(ctx);
+    queue_local_t *local_q = CONTAINER_OF_FIELD(queue, queue_local_t, queue);
+    rx_wr_cnt_dec(local_q);
+
+    return 1;
+}
+
 static int process_rx_msg(queue_t *queue, queue_msg_t *q_msg, urpc_poll_msg_t *msg, uint32_t urpc_chid)
 {
     if (q_msg->data == NULL) {
@@ -1597,7 +1615,7 @@ static int process_rx_msg(queue_t *queue, queue_msg_t *q_msg, urpc_poll_msg_t *m
     if (version > URPC_PROTO_VERSION) {
         queue_error_stats_record(queue, ERR_STATS_TYPE_INVALID_HEADER_VERSION);
         URPC_LIB_LIMIT_LOG_DEBUG("protocol version(%u) is not supported\n", version);
-        goto EXIT;
+        goto PROTO_ERR;
     }
 
     uint8_t type = urpc_req_parse_type(head);
@@ -1618,15 +1636,17 @@ static int process_rx_msg(queue_t *queue, queue_msg_t *q_msg, urpc_poll_msg_t *m
             break;
         default:
             URPC_LIB_LIMIT_LOG_DEBUG("protocol type(%u) is invalid\n", type);
-            goto EXIT;
+            goto PROTO_ERR;
     }
 
-EXIT:
     rx_user_ctx_put(ctx);
     queue_local_t *local_q = CONTAINER_OF_FIELD(queue, queue_local_t, queue);
     rx_wr_cnt_dec(local_q);
 
     return ret;
+
+PROTO_ERR:
+    return process_rx_protocol_error_msg(queue, q_msg, msg, urpc_chid);
 }
 
 static int poll_queue_notify_msg(queue_t *queue, urpc_poll_msg_t *msgs, int num)

@@ -510,6 +510,7 @@ typedef enum urpc_poll_err_event {
     POLL_ERR_EVENT_POLL_ERR = 0,    // client & server event, poll the event when a poll error occurs
     POLL_ERR_EVENT_QUEUE_ERR,       // client & server event, poll the event when a queue error occurs
     POLL_ERR_EVENT_CTX_ERR,         // client & server event, poll the event when a ctx error occurs
+    POLL_ERR_EVENT_PROTOCOL_ERR,    // client & server event, poll the event when a protocol error occurs
     POLL_ERR_EVENT_MAX
 } urpc_poll_err_event_t;
 
