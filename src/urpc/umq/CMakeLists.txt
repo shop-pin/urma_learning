@@ -12,7 +12,6 @@ include(${CMAKE_SOURCE_DIR}/urpc/umq/dfx/CMakeLists.txt)
 
 add_subdirectory(qbuf)
 add_subdirectory(umq_ub)
-add_subdirectory(umq_ubmm)
 add_subdirectory(umq_ipc)
 
 aux_source_directory(${CMAKE_CURRENT_LIST_DIR} UMQ_LIB_DIR_SRCS)
