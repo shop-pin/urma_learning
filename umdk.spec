@@ -57,7 +57,7 @@ Source0       : %{name}-%{version}.tar.gz
 BuildRoot     : %{_buildirootdir}/%{name}-%{version}-build
 buildArch     : x86_64 aarch64
 
-BuildRequires : rpm-build, make, cmake, gcc, gcc-c++, glibc-devel, openssl-devel, glib2-devel, libnl3-devel, kernel-devel, obmm, ummu-devel
+BuildRequires : rpm-build, make, cmake, gcc, gcc-c++, glibc-devel, openssl-devel, glib2-devel, libnl3-devel, kernel-devel, ummu-devel
 Requires: glibc, glib2, libummu
 %if %{with asan}
 Requires: libasan
@@ -371,7 +371,6 @@ fi
     %{_libdir}/libumq.so.*
     %{_libdir}/libumq_buf.so.*
     %{_libdir}/libumq_ub.so.*
-    %{_libdir}/libumq_ubmm.so.*
     %{_libdir}/libumq_ipc.so.*
     /etc/rsyslog.d/umq.conf
     /etc/logrotate.d/umq
@@ -391,7 +390,6 @@ fi
     %{_libdir}/libumq.so
     %{_libdir}/libumq_buf.so
     %{_libdir}/libumq_ub.so
-    %{_libdir}/libumq_ubmm.so
     %{_libdir}/libumq_ipc.so
     %dir %{_includedir}/ub
     %dir %{_includedir}/ub/umdk
