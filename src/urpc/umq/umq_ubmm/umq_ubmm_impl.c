@@ -421,7 +421,7 @@ int32_t umq_ubmm_bind_impl(uint64_t umqh_tp, uint8_t *bind_info, uint32_t bind_i
         return -UMQ_ERR_ENOMEM;
     }
 
-    int ret = UMQ_FAIL;
+    int ret = UMQ_SUCCESS;
     umq_ubmm_bind_info_t *tmp_info = (umq_ubmm_bind_info_t *)bind_info;
     if (tmp_info->trans_mode != UMQ_TRANS_MODE_UBMM && tmp_info->trans_mode != UMQ_TRANS_MODE_UBMM_PLUS) {
         UMQ_VLOG_ERR("trans mode: %d is invalid\n", tmp_info->trans_mode);
@@ -456,6 +456,7 @@ int32_t umq_ubmm_bind_impl(uint64_t umqh_tp, uint8_t *bind_info, uint32_t bind_i
     ctx->remote_ring.addr = obmem_import_memory(&import_param, &ctx->remote_ring.ubmm_export, &ctx->remote_ring.handle);
     if (ctx->remote_ring.addr == NULL) {
         UMQ_VLOG_ERR("ubmm import memory failed\n");
+        ret = UMQ_FAIL;
         goto UB_UNBIND;
     }
 
@@ -471,11 +472,13 @@ int32_t umq_ubmm_bind_impl(uint64_t umqh_tp, uint8_t *bind_info, uint32_t bind_i
     ctx->remote_msg_ring = msg_ring_create("", 0, &ipc_option);
     if (ctx->remote_msg_ring == NULL) {
         UMQ_VLOG_ERR("ipc create failed\n");
+        ret = UMQ_FAIL;
         goto UNIMPORT;
     }
 
     if (tmp_info->size < tmp_info->transmit_queue_buf_size) {
         UMQ_VLOG_ERR("transmit queue buf size should be less than shm buf size\n");
+        ret = UMQ_FAIL;
         goto DESTROY_IPC;
     }
     shm_qbuf_pool_cfg_t sm_qbuf_pool_cfg = {
@@ -490,6 +493,7 @@ int32_t umq_ubmm_bind_impl(uint64_t umqh_tp, uint8_t *bind_info, uint32_t bind_i
 
     ctx->qbuf_pool_handle = umq_shm_global_pool_init(&sm_qbuf_pool_cfg);
     if (ctx->qbuf_pool_handle == UMQ_INVALID_HANDLE) {
+        ret = UMQ_FAIL;
         goto DESTROY_IPC;
     }
 
