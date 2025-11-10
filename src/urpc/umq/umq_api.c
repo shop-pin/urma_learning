@@ -174,23 +174,14 @@ static umq_framework_t g_umq_fws[UMQ_TRANS_MODE_MAX] = {
     },
 };
 
-void umq_uninit(void)
+static void framework_uninit(void)
 {
-    if (!g_umq_inited) {
-        UMQ_VLOG_ERR("umq has not been inited\n");
-        return;
-    }
-
-    umq_dfx_uninit();
-    umq_qbuf_pool_uninit();
-    uint8_t fw_i;
-    for (fw_i = 0; fw_i < UMQ_TRANS_MODE_MAX; fw_i++) {
+    for (uint8_t fw_i = 0; fw_i < UMQ_TRANS_MODE_MAX; fw_i++) {
         umq_framework_t *umq_fw = &g_umq_fws[fw_i];
         umq_fw->pro_tp_ops = NULL;
         umq_fw->pro_ops_get_func = NULL;
 
-        if ((umq_fw->ctx != NULL) && (umq_fw->tp_ops != NULL) &&
-            (umq_fw->tp_ops->umq_tp_uninit != NULL)) {
+        if ((umq_fw->ctx != NULL) && (umq_fw->tp_ops != NULL) && (umq_fw->tp_ops->umq_tp_uninit != NULL)) {
             umq_fw->tp_ops->umq_tp_uninit(umq_fw->ctx);
         }
         umq_fw->ctx = NULL;
@@ -203,6 +194,18 @@ void umq_uninit(void)
         umq_fw->dlhandler = NULL;
         umq_fw->enable = false;
     }
+}
+
+void umq_uninit(void)
+{
+    if (!g_umq_inited) {
+        UMQ_VLOG_ERR("umq has not been inited\n");
+        return;
+    }
+
+    umq_dfx_uninit();
+    umq_qbuf_pool_uninit();
+    framework_uninit();
 
     if (g_buffer_addr != NULL) {
         free(g_buffer_addr);
@@ -275,34 +278,34 @@ int umq_init(umq_init_cfg_t *cfg)
         umq_fw->dlhandler = dlopen(umq_fw->dlopen_so_name, RTLD_LAZY | RTLD_GLOBAL);
         if (umq_fw->dlhandler == NULL) {
             UMQ_VLOG_ERR("open so failed, err: %s\n", dlerror());
-            goto INIT_FAIL;
+            goto FW_UNINIT;
         }
 
         if (load_symbol(umq_fw->dlhandler,
             (void **)&umq_fw->ops_get_func, umq_fw->ops_get_funcname) != UMQ_SUCCESS) {
             UMQ_VLOG_ERR("load_symbol ops failed\n");
-            goto INIT_FAIL;
+            goto FW_UNINIT;
         }
         umq_fw->tp_ops = umq_fw->ops_get_func();
         if ((umq_fw->tp_ops == NULL) || (umq_fw->tp_ops->umq_tp_init == NULL)) {
             UMQ_VLOG_ERR("get ops func failed\n");
-            goto INIT_FAIL;
+            goto FW_UNINIT;
         }
         umq_fw->ctx = umq_fw->tp_ops->umq_tp_init(cfg, g_buffer_addr, g_total_len);
         if (umq_fw->ctx == NULL) {
             UMQ_VLOG_ERR("tp init failed\n");
-            goto INIT_FAIL;
+            goto FW_UNINIT;
         }
 
         if (load_symbol(umq_fw->dlhandler,
             (void **)&umq_fw->pro_ops_get_func, umq_fw->pro_ops_get_funcname) != UMQ_SUCCESS) {
             UMQ_VLOG_ERR("load_symbol pro_ops failed\n");
-            goto INIT_FAIL;
+            goto FW_UNINIT;
         }
         umq_fw->pro_tp_ops = umq_fw->pro_ops_get_func();
         if (umq_fw->pro_tp_ops == NULL) {
             UMQ_VLOG_ERR("get pro_ops func failed\n");
-            goto INIT_FAIL;
+            goto FW_UNINIT;
         }
     }
 
@@ -315,18 +318,24 @@ int umq_init(umq_init_cfg_t *cfg)
     };
     if (umq_qbuf_pool_init(&qbuf_cfg) != UMQ_SUCCESS) {
         UMQ_VLOG_ERR("qbuf poll init failed\n");
-        goto INIT_FAIL;
+        goto FW_UNINIT;
     }
 
     if (umq_dfx_init(cfg) != UMQ_SUCCESS) {
         UMQ_VLOG_ERR("umq dfx init failed\n");
-        goto INIT_FAIL;
+        goto POOL_UNINIT;
     }
 
     g_umq_inited = true;
     return UMQ_SUCCESS;
-INIT_FAIL:
-    umq_uninit();
+
+POOL_UNINIT:
+    umq_qbuf_pool_uninit();
+
+FW_UNINIT:
+    framework_uninit();
+    free(g_buffer_addr);
+    g_buffer_addr = NULL;
     return UMQ_FAIL;
 }
 
