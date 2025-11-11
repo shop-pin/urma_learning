@@ -1512,6 +1512,12 @@ int urpc_channel_queue_pair(
         return -URPC_ERR_EINVAL;
     }
 
+    queue_local_t *local_q = (queue_local_t *)(uintptr_t)local_qh;
+    if (local_q->is_binded == URPC_TRUE) {
+        URPC_LIB_LOG_ERR("local queue is already binded\n");
+        return -URPC_ERR_EINVAL;
+    }
+
     queue_t *l_queue = (queue_t *)(uintptr_t)local_qh;
     queue_t *r_queue = (queue_t *)(uintptr_t)remote_qh;
     if (l_queue->status != QUEUE_STATUS_READY || r_queue->status > QUEUE_STATUS_READY) {

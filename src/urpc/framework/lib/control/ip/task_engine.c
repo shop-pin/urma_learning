@@ -3045,7 +3045,6 @@ int server_queue_bind(urpc_async_task_ctx_t *task)
         URPC_LIB_LOG_ERR("process advise find local queue failed, qid %u\n", r_bind_info->r_qid);
         return URPC_FAIL;
     }
-    ctx->l_q = &local_q->queue;
 
     queue_remote_t *remote_q = NULL;
     urpc_server_channel_info_t *server_channel =
@@ -3067,7 +3066,6 @@ int server_queue_bind(urpc_async_task_ctx_t *task)
         URPC_LIB_LOG_ERR("process bind find remote queue failed, qid %u\n", remote_q->qid);
         return URPC_FAIL;
     }
-    ctx->r_q = &remote_q->queue;
 
     if (local_q->queue.ops->bind_queue(&local_q->queue, &remote_q->queue) != URPC_SUCCESS) {
         (void)pthread_rwlock_unlock(&server_channel->rw_lock);
@@ -3075,6 +3073,10 @@ int server_queue_bind(urpc_async_task_ctx_t *task)
             "local id %u, remote id %u\n", local_q->qid, remote_q->qid);
         return URPC_FAIL;
     }
+
+    // assignment must be done after successful bind, otherwise rollback will exception.
+    ctx->l_q = &local_q->queue;
+    ctx->r_q = &remote_q->queue;
 
     queue_bind_info_t *l_bind_info = &ctx->l_bind_info;
     l_bind_info->l_qid = local_q->qid;

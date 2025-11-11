@@ -176,6 +176,7 @@ void send_recv_local_q_init(send_recv_queue_local_t *send_recv_local_q, jetty_pr
     send_recv_local_q->local_q.rx_flush_done = URPC_FALSE;
     send_recv_local_q->local_q.is_damage = URPC_FALSE;
     send_recv_local_q->local_q.err_timestamp = 0;
+    send_recv_local_q->local_q.is_binded = URPC_FALSE;
     atomic_init(&send_recv_local_q->local_q.err_msg_num, 0);
     atomic_init(&send_recv_local_q->in_restore_process, 0);
 }
