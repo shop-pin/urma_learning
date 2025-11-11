@@ -2836,7 +2836,8 @@ int32_t umq_ub_enqueue_impl(uint64_t umqh_tp, umq_buf_t *qbuf, umq_buf_t **bad_q
 
     int ret = UMQ_SUCCESS;
     uint32_t tx_outstanding = umq_fetch_ref(queue->dev_ctx->io_lock_free, &queue->tx_outstanding);
-    if (queue->tx_depth - tx_outstanding < UMQ_POST_POLL_BATCH) {
+    int remain_tx = queue->tx_depth - tx_outstanding;
+    if (remain_tx <= 0) {
         ret = -UMQ_ERR_EAGAIN;
         goto ERROR;
     }
@@ -2901,9 +2902,10 @@ int32_t umq_ub_enqueue_impl(uint64_t umqh_tp, umq_buf_t *qbuf, umq_buf_t **bad_q
         (urma_wr_ptr - 1)->next = urma_wr_ptr;
 
         wr_index++;
-        if (wr_index == UMQ_POST_POLL_BATCH && buffer != NULL) {
-            // wr count exceed UMQ_BATCH_SIZE
-            UMQ_LIMIT_VLOG_ERR("wr count exceeds %d, not supported\n", UMQ_POST_POLL_BATCH);
+        if ((wr_index == (uint32_t)remain_tx || wr_index == UMQ_POST_POLL_BATCH) && buffer != NULL) {
+            // wr count exceed remain_tx or UMQ_POST_POLL_BATCH
+            UMQ_LIMIT_VLOG_ERR("wr count %u exceeds remain_tx %d or max_post_size %d, not supported\n", wr_index, 
+                               remain_tx, UMQ_POST_POLL_BATCH);
             *bad_qbuf = qbuf;
             ret = -UMQ_ERR_EINVAL;
             goto ERROR;
@@ -2956,7 +2958,8 @@ int32_t umq_ub_enqueue_impl_plus(uint64_t umqh_tp, umq_buf_t *qbuf, umq_buf_t **
 
     int ret = UMQ_SUCCESS;
     uint32_t tx_outstanding = umq_fetch_ref(queue->dev_ctx->io_lock_free, &queue->tx_outstanding);
-    if (queue->tx_depth - tx_outstanding < UMQ_POST_POLL_BATCH) {
+    int remain_tx = queue->tx_depth - tx_outstanding;
+    if (remain_tx <= 0) {
         ret = -UMQ_ERR_EAGAIN;
         goto ERROR;
     }
@@ -3032,9 +3035,10 @@ int32_t umq_ub_enqueue_impl_plus(uint64_t umqh_tp, umq_buf_t *qbuf, umq_buf_t **
         (urma_wr_ptr - 1)->next = urma_wr_ptr;
 
         wr_index++;
-        if (wr_index == UMQ_POST_POLL_BATCH && buffer != NULL) {
-            // wr count exceed UMQ_BATCH_SIZE
-            UMQ_LIMIT_VLOG_ERR("wr count exceeds %d, not supported\n", UMQ_POST_POLL_BATCH);
+        if ((wr_index == (uint32_t)remain_tx || wr_index == UMQ_POST_POLL_BATCH) && buffer != NULL) {
+            // wr count exceed remain_tx or UMQ_POST_POLL_BATCH
+            UMQ_LIMIT_VLOG_ERR("wr count %u exceeds remain_tx %d or max_post_size %d, not supported\n", wr_index, 
+                               remain_tx, UMQ_POST_POLL_BATCH);
             *bad_qbuf = qbuf;
             ret = -UMQ_ERR_EINVAL;
             goto ERROR;
