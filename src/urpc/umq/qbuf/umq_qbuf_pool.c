@@ -217,13 +217,13 @@ int umq_qbuf_alloc(uint32_t request_size, uint32_t num, umq_alloc_option_t *opti
             return -UMQ_ERR_ENOMEM;
         }
 
-        while (local_pool->buf_cnt_without_data < actual_buf_count) {
+        while (local_pool->buf_cnt_without_data < num) {
             if (fetch_from_global(&g_qbuf_pool.block_pool, local_pool, false, QBUF_POOL_BATCH_CNT) <= 0) {
                 return -UMQ_ERR_ENOMEM;
             }
         }
 
-        umq_qbuf_alloc_nodata(local_pool, actual_buf_count, list);
+        umq_qbuf_alloc_nodata(local_pool, num, list);
 
         return 0;
     }

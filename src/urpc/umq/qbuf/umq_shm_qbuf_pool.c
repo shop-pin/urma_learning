@@ -483,14 +483,14 @@ int umq_shm_qbuf_alloc(
         }
 
         // fetch from global first, if thread local qbuf is not enough for allocate operation
-        while (lblk_pool->buf_cnt_without_data < actual_buf_count) {
+        while (lblk_pool->buf_cnt_without_data < num) {
             umq_shm_poll_and_fill_global(_pool);
             if (fetch_from_global(gblk_pool, lblk_pool, false, SHM_QBUF_POOL_BATCH_CNT) <= 0) {
                 return -UMQ_ERR_ENOMEM;
             }
         }
 
-        umq_qbuf_alloc_nodata(lblk_pool, actual_buf_count, list);
+        umq_qbuf_alloc_nodata(lblk_pool, num, list);
 
         return UMQ_SUCCESS;
     }
