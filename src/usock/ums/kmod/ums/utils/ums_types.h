@@ -159,6 +159,7 @@ struct ums_link {
 	int llc_testlink_time;                /* testlink interval */
 	atomic_t conn_cnt;                    /* connections on this link */
 	atomic_t jetty_mod_cnt;               /* jetty modified count */
+	struct ubcore_token jetty_token_value; /* token value for jetty */
 
 	struct hlist_node hnode; /* for ums_dev->jetty2link_htable */
 };
@@ -189,6 +190,7 @@ struct ums_buf_desc {
 			/* DMA address */
 		};
 	};
+	struct ubcore_token seg_token_value; /* token value for segment */
 };
 
 struct ums_rtoken { /* address/key of remote RMB */
@@ -595,6 +597,10 @@ struct ums_sock { /* ums sock container */
 	u8 connect_nonblock : 1;
 	/* protects clcsock of a listen socket */
 	struct rw_semaphore clcsock_release_lock;
+};
+
+struct ums_sys_tuning_config {
+	bool ub_token_disable;
 };
 
 #endif /* UMS_TYPES_H */

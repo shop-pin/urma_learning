@@ -39,6 +39,7 @@
 extern struct proto g_ums_proto;
 extern struct proto g_ums_proto6;
 extern struct ums_sysctl_config g_ums_sysctl_conf;
+extern struct ums_sys_tuning_config g_ums_sys_tuning_config;
 
 #ifdef ATOMIC64_INIT
 #define KERNEL_HAS_ATOMIC64

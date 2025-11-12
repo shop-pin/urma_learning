@@ -90,6 +90,7 @@ struct ums_clc_msg_local {            /* header2 of clc messages */
 	union ubcore_eid eid; /* ubcore_eid for peer to import jetty and seg */
 	u32 eid_index; /* 0 ~ (UBCORE_MAX_EID_CNT - 1) */
 	u8 mac[ETH_ALEN];                        /* mac of ub_device port */
+	u8 ub_token_enable; /* ub token config is enabled */
 };
 
 /* Struct would be 4 byte aligned, but it is used in an array that is sent
@@ -181,7 +182,8 @@ struct umsr_clc_msg_accept_confirm { /* UMSR accept/confirm */
 
 	__be64 rmb_dma_addr; /* RMB virtual address */
 	__be32 seg_flag;     /* UMS use this perserved field to store seg.flag for peer to import seg */
-	__be32 token_value;  /* token_value for peer to import seg when UB is used */
+	__be32 seg_token_value;  /* token_value for peer to import seg when UB is used */
+	__be32 jetty_token_value;  /* token_value for peer to import jetty when UB is used */
 	__be32 seg_token_id; /* seg.seg_token_id for peer to import seg */
 } __packed;
 

@@ -72,6 +72,11 @@ struct workqueue_struct *g_ums_close_wq = NULL;
 
 unsigned int g_ums_net_id;
 
+static uint32_t ub_token_disable;
+
+module_param(ub_token_disable, uint, 0);
+MODULE_PARM_DESC(ub_token_disable, "1:disable ub token, 0:enable ub token, default:0");
+
 static void ums_tcp_listen_work(struct work_struct *work);
 
 static void ums_set_keepalive(struct sock *sk, int val)
@@ -1124,6 +1129,17 @@ static void ums_destroy_base(void)
 	unregister_pernet_subsys(&g_ums_pernet_ops);
 }
 
+static void ums_init_sys_config(void)
+{
+	if (ub_token_disable == 0) {
+		g_ums_sys_tuning_config.ub_token_disable = false;
+		UMS_LOGI_LIMITED("ub_token is enable");
+	} else {
+		g_ums_sys_tuning_config.ub_token_disable = true;
+		UMS_LOGI_LIMITED("ub_token is disable");
+	}
+}
+
 static int __init ums_init(void)
 {
 	int rc;
@@ -1131,6 +1147,7 @@ static int __init ums_init(void)
 	tracing_on();
 #endif
 	rc = ums_init_base();
+	ums_init_sys_config();
 	if (rc != 0)
 		return rc;
 	rc = ums_ubcore_register_client();

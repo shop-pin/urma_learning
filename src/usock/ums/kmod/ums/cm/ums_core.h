@@ -236,6 +236,6 @@ void ums_link_hold(struct ums_link *lnk);
 void ums_link_put(struct ums_link *lnk);
 void ums_switch_link_and_count(struct ums_connection *conn, struct ums_link *to_lnk);
 void ums_lgr_set_type(struct ums_link_group *lgr, enum ums_lgr_type new_type);
-int ums_link_reg_buf(struct ums_link *link, struct ums_buf_desc *buf_desc);
+int ums_link_reg_buf(struct ums_link *link, struct ums_buf_desc *buf_desc, bool is_rmb);
 void ums_link_down_cond_sched(struct ums_link *lnk);
 #endif /* UMS_CORE_H */

@@ -30,7 +30,6 @@
 #include "ums_types.h"
 
 #define UMS_MAX_PORTS UBCORE_MAX_PORT_CNT /* Max # of ports */
-#define DEFAULT_KEY_POLICY UBCORE_TOKEN_NONE
 #define UMS_TYPICAL_MIN_RNR_TIMER 12
 
 #define UMS_JETTY2LINK_HASH_BITS 10 /* 1024 buckets */

@@ -33,6 +33,11 @@ Refer to the overall build steps for UMDK in the Readme.md.
 - RPM build Options
    --with ko_sign                                    option, i.e. disable ko_sign by default
 
+**UMS Module Options**
+- ko insmod/modprobe Options
+   --ub_token_disable=*                              option, i.e. 1:disable ub token, 0:enable ub token, default:0
+     Note: Enabling ub token may impact performance. Please evaluate the security requirements of your specific use case before deciding to enable it.
+
 ### 3.3 install UMS
 Note: UMS relies on the functionality of the URMA component. Before use, ensure that the URMA component is successfully installed and properly configured.
 rpm -ivh /root/rpmbuild/RPMS/aarch64/umdk-ums-*

@@ -44,7 +44,8 @@
 #define UMS_LGR_FREE_DELAY_CLNT		(UMS_LGR_FREE_DELAY_SERV + 10 * HZ)
 #endif
 
-#define DEFAULT_ACCESS (UBCORE_ACCESS_READ | UBCORE_ACCESS_WRITE | UBCORE_ACCESS_ATOMIC)
+#define SENDBUF_ACCESS UBCORE_ACCESS_LOCAL_ONLY
+#define RMB_ACCESS UBCORE_ACCESS_WRITE
 #define UMS_RMBE_MAX_SIZE 7 /* 0 -> 16KB, 1 -> 32KB, .. 5 -> 512KB .. 7 -> 2MB */
 #define UMS_BUF_MIN_SHIFT 14
 
@@ -52,6 +53,10 @@ struct ums_lgr_list g_ums_lgr_list = {	/* established link groups */
 	.lock = __SPIN_LOCK_UNLOCKED(g_ums_lgr_list.lock),
 	.list = LIST_HEAD_INIT(g_ums_lgr_list.list),
 	.num = 0,
+};
+
+struct ums_sys_tuning_config g_ums_sys_tuning_config = {
+	.ub_token_disable = false,
 };
 
 static atomic_t g_lgr_cnt = ATOMIC_INIT(0); /* number of existing link groups */
@@ -1344,14 +1349,14 @@ static inline int ums_rmb_wnd_update_limit(int rmbe_size)
 /* register a new buf on UBcore device, rmb or vzalloced sndbuf
  * must be called under lgr->llc_conf_mutex lock
  */
-int ums_link_reg_buf(struct ums_link *link, struct ums_buf_desc *buf_desc)
+int ums_link_reg_buf(struct ums_link *link, struct ums_buf_desc *buf_desc, bool is_rmb)
 {
 	struct ubcore_device *ub_dev = link->ums_dev->ub_dev;
 	struct ubcore_target_seg *seg = NULL;
 	union ubcore_reg_seg_flag flag = {
-		.bs.token_policy = DEFAULT_KEY_POLICY,
+		.bs.token_policy = g_ums_sys_tuning_config.ub_token_disable ? UBCORE_TOKEN_NONE : UBCORE_TOKEN_PLAIN_TEXT,
 		.bs.cacheable = UBCORE_NON_CACHEABLE,
-		.bs.access = DEFAULT_ACCESS,
+		.bs.access = is_rmb ? RMB_ACCESS : SENDBUF_ACCESS,
 		.bs.reserved = 0
 	};
 	struct ubcore_seg_cfg cfg;
@@ -1366,6 +1371,10 @@ int ums_link_reg_buf(struct ums_link *link, struct ums_buf_desc *buf_desc)
 		cfg.va = (uintptr_t)buf_desc->cpu_addr;
 		cfg.len = (uint64_t)buf_desc->len;
 		cfg.flag = flag;
+		if (!g_ums_sys_tuning_config.ub_token_disable) {
+			get_random_bytes(&buf_desc->seg_token_value.token, sizeof(buf_desc->seg_token_value.token));
+			cfg.token_value.token = buf_desc->seg_token_value.token;
+		}
 		seg = ubcore_register_seg(ub_dev, &cfg, NULL);
 		if (IS_ERR_OR_NULL(seg)) {
 			buf_desc->reg_err = true;
@@ -1393,7 +1402,7 @@ static int ums_lgr_reg_sndbufs(struct ums_link *link, struct ums_buf_desc *snd_d
 	for (i = 0; i < UMS_LINKS_PER_LGR_MAX; i++) {
 		if (!ums_link_usable(&lgr->lnk[i]))
 			continue;
-		rc = ums_link_reg_buf(&lgr->lnk[i], snd_desc);
+		rc = ums_link_reg_buf(&lgr->lnk[i], snd_desc, false);
 		if (rc != 0)
 			break;
 	}
@@ -1412,7 +1421,7 @@ static int ums_lgr_reg_rmbs(struct ums_sock *ums, struct ums_buf_desc *rmb_desc)
 	for (i = 0; i < UMS_LINKS_PER_LGR_MAX; i++) {
 		if (!ums_link_usable(&lgr->lnk[i]))
 			continue;
-		rc = ums_link_reg_buf(&lgr->lnk[i], rmb_desc);
+		rc = ums_link_reg_buf(&lgr->lnk[i], rmb_desc, true);
 		if (rc != 0)
 			goto out;
 		/* available link count inc */
@@ -1603,7 +1612,7 @@ int ums_rmb_import_seg(struct ums_connection *conn, struct ums_clc_msg_accept_co
 	struct ubcore_target_seg_cfg tseg_cfg;
 	union ubcore_import_seg_flag flag = {
 		.bs.cacheable = UBCORE_NON_CACHEABLE,
-		.bs.access = DEFAULT_ACCESS,
+		.bs.access = RMB_ACCESS,
 		.bs.mapping = UBCORE_SEG_NOMAP,
 		.bs.reserved = 0
 	};
@@ -1613,7 +1622,7 @@ int ums_rmb_import_seg(struct ums_connection *conn, struct ums_clc_msg_accept_co
 	tseg_cfg.seg.len = (uint64_t)conn->peer_rmbe_size;
 	tseg_cfg.seg.attr.value = ntohl(clc->r0.seg_flag);
 	tseg_cfg.seg.token_id = ntohl(clc->r0.seg_token_id);
-	tseg_cfg.token_value.token = ntohl(clc->r0.token_value);
+	tseg_cfg.token_value.token = ntohl(clc->r0.seg_token_value);
 	tseg_cfg.seg.ubva.va = be64_to_cpu(clc->r0.rmb_dma_addr);
 	(void)memcpy(tseg_cfg.seg.ubva.eid.raw, clc->r0.lcl.eid.raw, UMS_EID_SIZE);
 	tseg_cfg.mva = 0;

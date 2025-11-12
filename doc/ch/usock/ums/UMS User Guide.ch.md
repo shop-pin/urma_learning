@@ -33,6 +33,11 @@ cat /boot/config-$(uname -r) | grep CONFIG_SMC
 - RPM compilation Options
    --with ko_sign                                    option, i.e. disable ko_sign by default
 
+**UMS 模块参数说明**
+- ko insmod/modprobe Options
+   --ub_token_disable=*                              option, i.e. 1:disable ub token, 0:enable ub token, default:0
+      说明：开启ub token会影响性能，请使用者评估使用场景安全性，决策是否开启。
+
 ### 3.3 安装UMS
 说明:UMS需要调用URMA组件的能力，使用前需保证URMA组件安装成功且正常配置。
 rpm -ivh /root/rpmbuild/RPMS/aarch64/umdk-ums-*
