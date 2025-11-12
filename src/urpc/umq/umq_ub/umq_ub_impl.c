@@ -230,6 +230,7 @@ static inline rx_buf_ctx_t *queue_rx_buf_ctx_flush(rx_buf_ctx_list_t *rx_buf_ctx
 }
 
 typedef struct umq_ub_bind_info {
+    bool is_binded;
     umq_trans_mode_t umq_trans_mode;
     urma_transport_mode_t trans_mode;
     urma_jetty_grp_policy_t policy;
@@ -736,6 +737,7 @@ int umq_ub_bind_info_get_impl(uint64_t umqh, uint8_t *bind_info, uint32_t bind_i
     }
     ub_queue_t *queue = (ub_queue_t *)(uintptr_t)umqh;
     umq_ub_bind_info_t *info = (umq_ub_bind_info_t *)bind_info;
+    info->is_binded = queue->bind_ctx != NULL ? true : false;
     info->umq_trans_mode = queue->dev_ctx->trans_info.trans_mode;
     info->trans_mode = URMA_TM_RC;
     info->order_type = queue->dev_ctx->order_type;
@@ -956,7 +958,7 @@ int umq_ub_bind_impl(uint64_t umqh, uint8_t *bind_info, uint32_t bind_info_size)
         return -UMQ_ERR_EINVAL;
     }
     ub_queue_t *queue = (ub_queue_t *)(uintptr_t)umqh;
-    if (queue->bind_ctx != NULL) {
+    if (queue->bind_ctx != NULL || info->is_binded) {
         UMQ_VLOG_ERR("umq has already been binded\n");
         return -UMQ_ERR_EEXIST;
     }
