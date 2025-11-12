@@ -60,6 +60,7 @@ typedef struct umq_ubmm_info {
 } umq_ubmm_info_t;
 
 typedef struct umq_ubmm_bind_info {
+    bool is_binded;
     umq_trans_mode_t trans_mode;
     // ubmem related
     uint32_t token_id;
@@ -365,7 +366,6 @@ int32_t umq_ubmm_destroy_impl(uint64_t umqh_tp)
 int32_t umq_ubmm_bind_info_get_impl(uint64_t umqh_tp, uint8_t *bind_info, uint32_t bind_info_size)
 {
     umq_ubmm_info_t *tp = (umq_ubmm_info_t *)(uintptr_t)umqh_tp;
-
     if (bind_info_size < sizeof(umq_ubmm_bind_info_t)) {
         UMQ_VLOG_ERR("bind_info_size[%u] is less than required size[%u]",
             bind_info_size, sizeof(umq_ubmm_bind_info_t));
@@ -381,6 +381,7 @@ int32_t umq_ubmm_bind_info_get_impl(uint64_t umqh_tp, uint8_t *bind_info, uint32
     }
 
     umq_ubmm_bind_info_t *tmp_info = (umq_ubmm_bind_info_t *)bind_info;
+    tmp_info->is_binded = tp->bind_ctx != NULL ? true : false;
     tmp_info->trans_mode = tp->ubmm_ctx->trans_info.trans_mode;
     tmp_info->token_id = tp->local_ring.ubmm_export.token_id;
     tmp_info->uba = tp->local_ring.ubmm_export.uba;
@@ -405,7 +406,8 @@ int32_t umq_ubmm_bind_info_get_impl(uint64_t umqh_tp, uint8_t *bind_info, uint32
 int32_t umq_ubmm_bind_impl(uint64_t umqh_tp, uint8_t *bind_info, uint32_t bind_info_size)
 {
     umq_ubmm_info_t *tp = (umq_ubmm_info_t *)(uintptr_t)umqh_tp;
-    if (tp->bind_ctx != NULL) {
+    umq_ubmm_bind_info_t *tmp_info = (umq_ubmm_bind_info_t *)bind_info;
+    if (tp->bind_ctx != NULL || tmp_info->is_binded) {
         UMQ_VLOG_ERR("umq has already been binded\n");
         return -UMQ_ERR_EEXIST;
     }
@@ -422,7 +424,6 @@ int32_t umq_ubmm_bind_impl(uint64_t umqh_tp, uint8_t *bind_info, uint32_t bind_i
     }
 
     int ret = UMQ_SUCCESS;
-    umq_ubmm_bind_info_t *tmp_info = (umq_ubmm_bind_info_t *)bind_info;
     if (tmp_info->trans_mode != UMQ_TRANS_MODE_UBMM && tmp_info->trans_mode != UMQ_TRANS_MODE_UBMM_PLUS) {
         UMQ_VLOG_ERR("trans mode: %d is invalid\n", tmp_info->trans_mode);
         ret = -UMQ_ERR_EINVAL;
