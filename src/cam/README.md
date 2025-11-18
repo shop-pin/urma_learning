@@ -1,5 +1,3 @@
 # CAM
 
-#### 介绍
-计算通信融合算子。
-#### 软件架构
+CAM is short for Communication Acceleration for Matrix on Ascend NPU. 
