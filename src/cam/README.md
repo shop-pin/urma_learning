@@ -20,8 +20,8 @@
   - [ ] Support W4A8 for GEMM
 - [ ]  **KVCache Transfer** 
 - [ ]  **RL Weights Transfer** 
-- [ ]  **AFD Communication
-** 
+- [ ]  **AFD Communication**
+ 
 # Performance
 (To be done)
 
