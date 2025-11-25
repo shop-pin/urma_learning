@@ -1,7 +1,7 @@
 ## URMA接口规范
 
 接口文件列表： 
-[urma_api.h](../../src/urma/lib/urma/core/include/urma_api.h)
+[urma_api.h](../../../src/urma/lib/urma/core/include/urma_api.h)
 
 ### URMA简介
 ### 1. 基础概念
