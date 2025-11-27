@@ -39,7 +39,7 @@ def prepare_test_case_new(host_list, case_path, case_name="test_case"):
         if host_list[i].manage_ip != host_list[0].manage_ip:
             host_list[i].exec_cmd(f"mkdir -p {case_path};rm -f {case_out}")
             host_list[0].try_put(case_out, host_list[i], case_out)
-    
+
 def urma_admin_show_res(self):
     res_dict = {}
     _cmd = f"urma_admin show_res -d udma2 -R 12|grep '_cnt\s*:'"
@@ -109,7 +109,7 @@ def exec_test_case(self, path, app_num=2, mode=None, tp_kind=None, env=None, hos
             if host_list[0].test_nic[1]['name'] == 'bonding_dev_0':
                 if (k == 'TP' and m != 'RC') or (k == 'CTP' and m == 'UM'):
                     continue
-            
+
             eid = 0 if host_list[0].test_nic[1]['name'] == 'bonding_dev_0' else 7
             tcp_port = self.get_free_port()
 
