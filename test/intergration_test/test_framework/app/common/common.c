@@ -60,7 +60,7 @@ int parse_config(int argc, char *argv[])
                                     {"ip_num", required_argument, NULL, 1},
                                     {"ip_addrs", required_argument, NULL, 2},
                                     {NULL, no_argument, NULL, '\0'}};
-    
+
     char app_num[PARSE_CFG_MAX_LEN] = {0};
     char app_id[PARSE_CFG_MAX_LEN] = {0};
     char server_ip[PARSE_CFG_MAX_LEN] = {0};
@@ -253,7 +253,7 @@ static int server_listen()
     int *sock;
     char buf[MAX_EXEC_CMD_RET_LEN];
     g_test_ctx.listen_sock = -1;
-    
+
     g_test_ctx.sock = (int *)calloc(1, (g_test_ctx.app_num - 1) * sizeof(int));
     CHECK_JUMP(g_test_ctx.sock == NULL, EXIT, "Failed to calloc!\n");
 
@@ -630,7 +630,7 @@ test_context_t *create_test_ctx(int argc, char *argv[], int thread_num)
         destroy_test_ctx(ctx);
         return NULL;
     }
-    
+
     return ctx;
 }
 
