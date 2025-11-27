@@ -192,8 +192,8 @@ test_urpc_ctx_t *test_urpc_ctx_init(int argc, char *atgv[], int thread_num)
     g_test_urpc_ctx.queue_num = DEFAULT_QUEUE_NUM;
     g_test_urpc_ctx.qgrph_num = 0;
     g_test_urpc_ctx.queue_cfg = (urpc_qcfg_create_t *)calloc(1, sizeof(urpc_qcfg_create_t));
-    g_test_urpc_ctx.queue_cfg->create_flag != QCREATE_FLAG_BUF_SIZE | QCREATE_FLAG_RX_DEPTH | QCREATE_FLAG_TX_DEPTH | QCREATE_FLAG_PRIORITY;
-    g_test_urpc_ctx.queue_cfg->tx_buf_size = DEFAULT_RX_BUF_SIZE;
+    g_test_urpc_ctx.queue_cfg->create_flag |= QCREATE_FLAG_RX_BUF_SIZE | QCREATE_FLAG_RX_DEPTH | QCREATE_FLAG_TX_DEPTH | QCREATE_FLAG_PRIORITY;
+    g_test_urpc_ctx.queue_cfg->rx_buf_size = DEFAULT_RX_BUF_SIZE;
     g_test_urpc_ctx.queue_cfg->rx_depth = DEFAULT_RX_DEPTH;
     g_test_urpc_ctx.queue_cfg->tx_depth = DEFAULT_TX_DEPTH;
     g_test_urpc_ctx.queue_cfg->priority = CLOUD_STORAGE_PRIORITY;
@@ -973,7 +973,7 @@ int test_channel_create(test_urpc_ctx_t *ctx)
     if (ctx->channel_num > 0) {
         ctx->ctx_flag |= CTX_FLAG_CHANNEL_CREATE;
     }
-    if (ctx->channel_nbu == channel_num) {
+    if (ctx->channel_num == channel_num) {
         return TEST_SUCCESS;
     }
     return TEST_FAILED;
@@ -1345,7 +1345,7 @@ int test_channel_add_remote_queue(channel_ops *channel_ops)
     for (uint32_t j = 0; j < channel_ops->rqueue_num; j++) {
         ret = test_channel_queue_add(channel_ops->id, channel_ops->rqueue_ops[j].qid, true);
         if (ret != TEST_SUCCESS) {
-            TEST_LOG_ERROR("test_channel_queue_add channel_ops_->id=%d rqueue_ops[%u].qid=%u failed\n", channel_ops->id, j, channel_ops->rqueue_ops[j].qid);
+            TEST_LOG_ERROR("test_channel_queue_add channel_ops->id=%d rqueue_ops[%u].qid=%u failed\n", channel_ops->id, j, channel_ops->rqueue_ops[j].qid);
             return TEST_FAILED;
         }
 
@@ -1360,6 +1360,1912 @@ int test_channel_add_remote_queue(channel_ops *channel_ops)
 EXIT:
     return TEST_FAILED;
 }
+
+int test_add_remote_queue(test_urpc_ctx_t *ctx, bool flush_rqueue)
+{
+    int retry = 0; ret = TEST_FAILED;
+    for (uint32_t i = 0; i < ctx->channel_num; i++) {
+        ctx->channel_ops[i].flush_rqueue = flush_rqueue;
+        ctx->channel_ops[i].not_one_by_one = ctx->not_one_by_one;
+        ret = test_flush_channel_rqueue(&ctx->channel_ops[i]);
+        if (ret != TEST_SUCCESS) {
+            TEST_LOG_ERROR("test_flush_channel_rqueue channel_ops[%u] failed\n", i);
+            return TEST_FAILED;
+        }
+        ret = test_channel_add_remote_queue(&ctx->channel_ops[i]);
+        if (ret != TEST_SUCCESS) {
+            TEST_LOG_ERROR("test_channel_add_remote_queue channel_ops[%u] failed", i);
+            return TEST_FAILED;
+        }
+    }
+    ctx->func_id = DEFAULT_FUNC_ID
+    ctx->ctx_flag |= CTX_FLAG_CHANNEL_ADD_REMOTE_QUEUE；
+    return TEST_SUCCESS;
+}
+
+int test_channel_rm_local_queue(channel_ops_t *channel_ops, bool is_free)
+{
+    int rc = 0, task_id, ret;
+    for (uint32_t j = 0; j < channel_ops->lqueue_num; j++) {
+        ret = test_channel_queue_rm(channel_ops->id, channel_ops->lqueue_ops[j].qh);
+        if (ret != TEST_SUCCESS) {
+            TEST_LOG_ERROR("test_channel_queue_rm hannel_ops->id=%u hannel_ops->lqueue_ops[%u].qh=%p\n",channel_ops->id, j, channel_ops->lqueue_ops[j].qh)
+        }
+        rc += ret;
+    }
+    if (is_free) {
+        channel_ops->lqueue_num = 0;
+        channel_ops->flush_lqueue = false;
+        CHECK_FREE(channel_ops->lqueue_ops);
+    }
+    return rc;
+}
+
+int test_rm_local_queue(test_urpc_ctx_t *ctx, channel_ops_t *channel_ops)
+{
+    if (channel_ops != NULL) {
+        return test_channel_rm_local_queue(channel_ops);
+    }
+    inr rc = 0, ret;
+    if ((ctx->ctx_flag & CTX_FLAG_CHANNEL_ADD_LOCAL_QUEUE) == 0) {
+        return TEST_SUCCESS;
+    }
+    for (uint32_t i = 0; i < ctx->channel_num; i++) {
+        rc += test_channel_rm_local_queue(&ctx->channel_ops[i]);
+    }
+    if (rc == 0) {
+        ctx->ctx_flag &= ~CTX_FLAG_CHANNEL_ADD_LOCAL_QUEUE;
+    }
+    return rc;
+}
+
+int test_channel_rm_remote_queue(channel_ops_t *channel_ops, bool is_free)
+{
+    int rc = 0, task_id, ret;
+    for (uint32_t j = 0; j < channel_ops->rqueue_num; j++) {
+        ret = test_channel_queue_rm(channel_ops->id, channel_ops->rqueue_ops[j].qid, true);
+        if (ret != TEST_SUCCESS) {
+            TEST_LOG_ERROR("test_channel_queue_rm channel_ops->id=%u channel_ops->rqueue_ops[%u].qid=%u failed\n", hannel_ops->id, j, channel_ops->rqueue_ops[j].qid);
+        }
+        rc ++ ret;
+    }
+    if (is_free) {
+        channel_ops->rqueue_num = 0;
+        channel_ops->flush_rqueue = false;
+        CHECK_FREE(channel_ops->rqueue_ops);
+    }
+    return rc;
+}
+
+int test_rm_remote_queue(test_urpc_ctx_t *ctx, channel_ops_t *channel_ops)
+{
+    if (channel_ops != NULL) {
+        return test_channel_rm_remote_queue(channel_ops);
+    }
+    int rc = 0, ret;
+    if ((ctx->ctx_flag & CTX_FLAG_CHANNEL_ADD_REMOTE_QUEUE) == 0) {
+        return TEST_SUCCESS;
+    }
+    for (uint32_t i = 0; i < ctx->channel_num; i++) {
+        rc += test_channel_rm_remote_queue(&ctx->channel_ops[i]);
+    }
+    if (rc == 0) {
+        ctx->ctx_flag &= ~CTX_FLAG_CHANNEL_ADD_REMOTE_QUEUE;
+    }
+    return rc;
+}
+
+server_queue_t get_server_queue()
+{
+    int ret = 0;
+    urpc_qcfg_get_t qcfg_get_cfg = {0};
+    server_queue_t server_queue = {};
+    memset(&server_queue, 0, sizeof(server_queue_t));
+    server_queue.num = g_test_urpc_ctx.queue_num;
+    server_queue.app_id = g_test_urpc_ctx.app_id;
+    if (g_test_urpc_ctx.queue_handles == nullptr || g_test_urpc_ctx.queue_num == 0) {
+        TEST_LOG_WARN("server queue_handles is %p, queue_num is %u\n", g_test_urpc_ctx.queue_handles, g_test_urpc_ctx.queue_num);
+        return server_queue;
+    }
+
+}
+
+static void *qserver_worker_func(void *args)
+{
+    struct epoll_event event;
+    while (g_qserver_status) {
+        usleep(1);
+        int ret = epoll_wait(g_qserver_epoll_fd, &event, 1, 100);
+        if (ret == -1 && errno == EINTR){
+            continue;
+        }
+        if (ret > 0 && event.data.fd == g_qserver_fd) {
+            struct sockaddr_in client_addr;
+            socklen_t addr_len = sizeof(client_addr);
+            int client_fd = accept(g_qserver_fd, (struct sockaddr *)&client_addr, &addr_len);
+            if (client_fd == -1) {
+                if (errno == EBADF) {
+                    break;
+                }
+                continue;
+            }
+            char buffer[1024];
+            recv(client_fd, buffer, sizeof(buffer), 0);
+            if (strcmp(buffer, "GET_QID") == 0) {
+                server_queue_t server_queue = get_server_queue();
+                send(client_fd, (char *)&server_queue, sizeof(server_queue_t), 0);
+            }
+            close(client_fd);
+        }
+    }
+    return NULL;
+}
+
+static int test_qserver_start(test_urpc_ctx_t *ctx)
+{
+    if (ctx->cp_is_ipv6) {
+        g_qserver_fd = start_ipv6_server(ctx->urpc_cp_config->server.ipv6.ip_addr, ctx->urpc_cp_config->server.ipv6.port + 10000);
+    } else {
+        g_qserver_fd = start_ipv4_server(ctx->urpc_cp_config->server.ipv4.ip_addr, ctx->urpc_cp_config->server.ipv4.port + 10000);
+    }
+    if (g_qserver_fd < 0) {
+        TEST_LOG_ERROR("create qserver socket failed, %s\n", strerror(errno));
+        return TEST_FAILED;
+    }
+
+    g_qserver_epoll_fd = epoll_create1(0);
+    if (g_qserver_epoll_fd < 0) {
+        TEST_LOG_ERROR("qserver epoll_create1 failed, %s\n", strerror(errno));
+        return TEST_FAILED;
+    }
+
+    struct epoll_event ev;
+    ev.events = EPOLLIN;
+    ev.data.fd = g_qserver_fd;
+    if (epoll_ctl(g_qserver_epoll_fd, EPOLL_CTL_ADD, g_qserver_fd, &ev) != 0) {
+        TEST_LOG_ERROR("qserver epoll_ctl failed, %s\n", strerror(errno));
+        return TEST_FAILED;
+    }
+    g_qserver_status = true;
+    if (pthread_create(&g_qserver_thread, NULL, qserver_worker_func, NULL) != 0) {
+        TEST_LOG_ERROR("qserver pthread_create failed, %s\n", strerror(errno));
+        return TEST_FAILED;
+    }
+    const char *thread_name = "qserver_listen";
+    if (pthread_setname_np(g_qserver_thread, thread_name) != 0) {
+        TEST_LOG_ERROR("qserver pthread_setname_np failed, %s\n", strerror(errno));
+        return TEST_FAILED;
+    }
+    return TEST_SUCCESS;
+}
+
+void test_qserver_stop(test_urpc_ctx_t *ctx);
+{
+    g_qserver_status = false;
+    if (g_qserver_epoll_fd >= 0) {
+        epoll_ctl(g_qserver_epoll_fd, EPOLL_CTL_DEL, g_qserver_fd, NULL);
+    }
+    if (g_qserver_fd >= 0) {
+        close(g_qserver_fd);
+    }
+    if (g_qserver_thread != 0) {
+        pthread_join(g_qserver_thread, NULL);
+        g_qserver_thread = 0;
+    }
+}
+
+int test_channel_get_server_queue(channel_ops_t *channel_ops)
+{
+    int ret, client_fd;
+    char buffer[MAX_LINE_LENGTH] = {0};
+    const CHAR *MESSAGE = "GET_QID";
+    size_t len = strlen(message);
+    if (g_test_urpc_ctx.cp_is_ipv6) {
+        client_fd = start_ipv6client(channel_ops->server.ipv6.ip_addr, channel_ops->server.ipv6.port + 10000);
+    } else {
+        client_fd = start_ipv6client(channel_ops->server.ipv4.ip_addr, channel_ops->server.ipv4.port + 10000);
+    }
+    CHKERR_JUMP(client_fd < 0, "create client socket", EXIT);
+    ret = send(client_fd, message, len, 0);
+    server_queue_t server_queue;
+    CHKERR_JUMP(ret < len, "send", EXIT);
+    ret = read(client_fd, &server_queue, sizeof(server_queue_t));
+    close(client_fd);
+    return TEST_SUCCESS;
+EXIT:
+    close(client_fd);
+    return TEST_FAILED;
+}
+
+int test_channel_queue_pair(test_urpc_ctx_t *ctx, uint32_t urpc_chid, uint64_t l_queue, uint64_t r_queue, urpc_channel_connect_option_t *option, size_t wait_time)
+{
+    int ret = TEST_FAILED, task_id;
+    if (option == nullptr) {
+        urpc_channel_connect_option_t coption = get_channel_connect_option();
+        task_id = urpc_channel_queue_pair(urpc_chid, l_queue, r_queue, &coptio);
+    } else {
+        task_id = urpc_channel_queue_pair(urpc_chid, l_queue, r_queue, option);
+    }
+    TEST_LOG_INFO("urpc_channel_queue_pair task_id=%d\n",task_id);
+    if (ctx->async_ops.flag == ASYNC_FLAG_BLOCK) {
+        return task_id;
+    }
+    CHKERR_JUMP(task_id <= 0, "urpc_channel_queue_pair", EXIT);
+    if (ctx.async_ops.flag == ASYNC_FLAG_ENABLE || ctx.async_ops.flag == ASYNC_FLAG_NON_BLOCK) {
+        ret = wait_async_event_result(ctx, URPC_ASYNC_EVENT_CHANNEL_QUEUE_PIAR);
+        CHKERR_JUMP(ret != TEST_SUCCESS, "wait_async_event_result", EXIT);
+    } else if (ctx.async_ops.falg == ASYNC_FLAG_NON_BLOCK_NOT_POLL) {
+        ret = test_async_event_get(URPC_ASYNC_EVENT_CHANNEL_QUEUE_PIAR, wait_time);
+        CHKERR_JUMP(ret != TEST_SUCCESS, "test_async_event_get", EXIT);
+    }
+    ctx->ctx_flag |= CTX_FLAG_QUEUE_PAIR;
+    ret = TEST_SUCCESS;
+EXIT:
+    return ret;
+}
+
+int test_normal_queue_pair(test_urpc_ctx_t *ctx, uint32_t channel_id, urpc_channel_connect_option_t *option, size_t wait_time)
+{
+    int ret = TEST_FAILED;
+    int pair_num_each_channel = 0;
+    int queue_mod_channel = 0;
+    urpc_channel_qinfos_t qinfos;
+
+    if (channel_id == URPC_U32_FAIL) {
+        if (!ctx->not_one_by_one) {
+            for (uint32_t i = 0; i < ctx->channel_num; i++) {
+                if (ctx->channel_ids[i] == URPC_U32_FAIL) {
+                    continue;
+                }
+                memset(&qinfos, 0, sizeof(qinfos));
+                ret = urpc_channel_queue_query(ctx->channel_ids[i], &qinfos);
+                CHKERR_JUMP(ret != TEST_SUCCESS, "urpc_channel_queue_query", EXIT);
+                for (uint32_t j = 0; j < ctx->channel_ops[i].rqueue_num; j++) {
+                    TEST_LOG_DEBUG("test round channel id=%u lqueue id=%u rqueue id=%u\n",i ,j ,j);
+                    TEST_LOG_DEBUG("test_channel_queue_pair %u lqh=%p rqg=%p\n",j ,ctx->channel_ops[i].lqueue_ops[j], ctx->channel_ops[i].rqueue_ops[j].qh);;
+                    if (qinfos.r_qinfo[j].status == QUEUE_STATUS_READY) {
+                        ret = test_channel_queue_pair(ctx, ctx->channel_ids[i], ctx->channel_ops[i],lqueue_ops[j].qh, ctx->channel_ops[i],rqueue_ops[j].qh, option, wait_time);
+                        if (ret != TEST_SUCCESS) {
+                            TEST_LOG_INFO("test round channel id=%u lqueue id=%u rqueue id=%u\n",i ,j ,j);
+                            TEST_LOG_ERROR("test_channel_queue_pair %u lqh=%p\n", j, ctx->channel_ops[i].lqueue_ops[j].qh);
+                            TEST_LOG_ERROR("test_channel_queue_pair %u lqh=%p\n", j, ctx->channel_ops[i].rqueue_ops[j].qh);
+                        }
+                        CHKERR_JUMP(ret != TEST_SUCCESS, "test_channel_queue_pair", EXIT);
+                    }
+                }
+            }
+        } else {
+            pair_num_each_channel = ctx->queue_num / ctx->channel_num;
+            queue_mod_channel = ctx->queue_num % ctx->channel_num;
+            int loop = pair_num_each_channel;
+            TEST_LOG_INFO("pair_num_each_channel:%d queue_mod_channel:%d\n", pair_num_each_channel, queue_mod_channel);
+            for (uint32_t i = 0; i < ctx->channel_num; i++) {
+                continue;
+            }
+            memset(&qinfos, 0, sizeof(qinfos));
+            ret = urpc_channel_queue_query(ctx->channel_ids[i], &qinfos);
+            CHKERR_JUMP(ret != TEST_SUCCESS, "urpc_channel_queue_query", EXIT);
+            if (queue_mod_channel != 0) {
+                if (i == ctx->channel_num - 1) {
+                    loop = queue_mod_channel + pair_num_each_channel;
+                }
+            }
+            for (uint32_t j = 0; j < loop; j++) {
+                TEST_LOG_DEBUG("tets round channel id=%u lqueue id=%u rqueue id=%u\n",i , i * pair_num_each_channel + j, i * pair_num_each_channel + j);
+                TEST_LOG_DEBUG("test_channel_queue_pair %u lqh=llu% rqh=%llu\n", i * pair_num_each_channel + j, ctx->channel_ops[i].lqueue_ops[i*pair_num_each_channel+j].qh, 
+                ctx->channel_ops[i].rqueue_ops[i * pair_num_each_channel + j].qh);
+                if (qinfos.r_qinfo[i * pair_num_each_channel + j].status == QUEUE_STATUS_READY) {
+                    ret = test_channel_queue_pair(ctx, ctx->channel_ids[i], ctx->channel_ops[i].lqueue_ops[i * pair_num_each_channel + j].qh,
+                    ctx->channel_ops[i].rqueue_ops[i * pair_num_each_channel + j].qh, option, wait_time);
+                    if (ret != TEST_SUCCESS) {
+                        TEST_LOG_INFO("test round channel id=%u lqueue id=%u rqueue id=%u\n",i , i * pair_num_each_channel + j, i * pair_num_each_channel + j);
+                        TEST_LOG_ERROR("test_channel_queue_pair %u lqh=%p\n", i * pair_num_each_channel + j, ctx->channel_ops[i].lqueue_ops[i*pair_num_each_channel+j].qh);
+                        TEST_LOG_ERROR("test_channel_queue_pair %u lqh=%p\n", i * pair_num_each_channel + j, ctx->channel_ops[i].rqueue_ops[i * pair_num_each_channel + j].qh);
+                    }
+                    CHKERR_JUMP(ret != TEST_SUCCESS, "test_channel_queue_pair", EXIT);
+                }
+            }
+        }
+    } else {
+        channel_ops_t *channel_ops = get_channel_ops_by_id(channel_id);
+        memset(&qinfos, 0, sizeof(qinfos));
+        ret = urpc_channel_queue_query(channel_id, &qinfos);
+        CHKERR_JUMP(ret != TEST_SUCCESS, "urpc_channel_queue_query", EXIT);
+        for (uint32_t j = 0; j < channel_ops->rqueue_num; j++) {
+            if (qinfos.r_qinfo[j].status == QUEUE_STATUS_READY) {
+                ret = test_channel_queue_pair(ctx, channel_id, channel_ops->lqueue_ops[j].qh, channel_ops->lqueue_ops[j].qh, option, wait_time);
+                CHKERR_JUMP(ret != TEST_SUCCESS, "test_channel_queue_pair", EXIT);
+            }
+        }
+    }
+    ctx->ctx_flag |= CTX_FLAG_QUEUE_PAIR;
+    ret = TEST_SUCCESS;
+EXIT:
+    return ret;
+}
+
+int test_channel_queue_unpair(test_urpc_ctx_t *ctx, uint32_t urpc_chid, uint64_t l_queue, uint64_t r_queue, urpc_channel_connect_option_t *option, size_t wait_time)
+{
+    int ret = TEST_FAILED, task_id;
+    if (option == nullptr) {
+        urpc_channel_connect_option_t coption = get_channel_connect_option();
+        task_id = urpc_channel_queue_pair(urpc_chid, l_queue, r_queue, &coptio);
+    } else {
+        task_id = urpc_channel_queue_pair(urpc_chid, l_queue, r_queue, option);
+    }
+    TEST_LOG_INFO("urpc_channel_queue_pair task_id=%d\n",task_id);
+    if (ctx->async_ops.flag == ASYNC_FLAG_BLOCK) {
+        return task_id;
+    }
+    CHKERR_JUMP(task_id <= 0, "urpc_channel_queue_pair", EXIT);
+    if (ctx.async_ops.flag == ASYNC_FLAG_ENABLE || ctx.async_ops.flag == ASYNC_FLAG_NON_BLOCK) {
+        ret = wait_async_event_result(ctx, URPC_ASYNC_EVENT_CHANNEL_QUEUE_PIAR);
+        CHKERR_JUMP(ret != TEST_SUCCESS, "wait_async_event_result", EXIT);
+    } else if (ctx.async_ops.falg == ASYNC_FLAG_NON_BLOCK_NOT_POLL) {
+        ret = test_async_event_get(URPC_ASYNC_EVENT_CHANNEL_QUEUE_PIAR, wait_time);
+        CHKERR_JUMP(ret != TEST_SUCCESS, "test_async_event_get", EXIT);
+    }
+    ctx->ctx_flag |= CTX_FLAG_QUEUE_PAIR;
+    ret = TEST_SUCCESS;
+EXIT:
+    return ret;
+}
+
+int test_normal_queue_unpair(test_urpc_ctx_t *ctx, uint32_t channel_id, urpc_channel_connect_option_t *option, size_t wait_time)
+{
+    int ret = TEST_FAILED;
+    urpc_channel_qinfos_t qinfos;
+    if ((ctx->ctx_flag & CTX_FLAG_QUEUE_PAIR) != 0) {
+        if (channel_id == URPC_U32_FAIL) {
+            for (uint32_t i = 0; i < ctx->channel_num; i++) {
+                if (ctx->channel_ids[i] == URPC_U32_FAIL) {
+                    continue;
+                }
+                memset(&qinfos, 0, sizeof(qinfos));
+                ret = urpc_channel_queue_query(ctx->channel_ids[i], &qinfos);
+                CHKERR_JUMP(ret != TEST_SUCCESS, "urpc_channel_queue_query", EXIT);
+                for (uint32_t j = 0; j < ctx->channel_ops[i].rqueue_num; j++) {
+                    if (qinfos.r_qinfo[j].status == QUEUE_STATUS_READY) {
+                        ret = test_channel_queue_unpair(ctx, ctx->channel_ids[i], ctx->channel_ops[i].lqueue_ops[j].qh, ctx->channel_ops[i].rqueue_ops[j].qh, option, wait_time);
+                        CHKERR_JUMP(ret != TEST_SUCCESS, "test_channel_queue_unpair", EXIT);
+                    }
+                }
+            }
+        } else {
+            channel_ops_t *channel_ops = get_channel_ops_by_id(channel_id);
+            memset(&qinfos, 0, sizeof(qinfos));
+            ret = urpc_channel_queue_query(cchannel_id, &qinfos);
+            CHKERR_JUMP(ret != TEST_SUCCESS, "urpc_channel_queue_query", EXIT);
+            for (uint32_t j = 0; j < channel_ops->rqueue_num; j++) {
+                if (qinfos.r_qinfo[j].status == QUEUE_STATUS_READY) {
+                    ret = test_channel_queue_unpair(ctx, cchannel_id, channel_ops->lqueue_ops[j].qh, channel_ops->rqueue_ops[j].qh, option, wait_time);
+                    CHKERR_JUMP(ret != TEST_SUCCESS, "test_channel_queue_unpair", EXIT);
+                }
+            }
+        }
+        ctx->ctx_flag &= ~CTX_FLAG_QUEUE_PAIR;
+    }
+    ret = TEST_SUCCESS;
+EXIT:
+    return ret;
+}
+
+void test_func_handler_func(urpc_sge_t *args, uint32_t args_sge_num, void *ctx, urpc_sge_t **rsps, uint32_t *rsps_sge_num)
+{
+    char *client_msg = (char *)(uintptr_t)args[0].addr + urpc_hdr_size_get(URPC_REQ, 0);
+    g_test_urpc_ctx.rsp_size = (g_test_urpc_ctx.rsp_size == 0) ? g_test_urpc_ctx.allocator_config.block_size : g_test_urpc_ctx.rsp_size;
+    int ret = g_test_allocator.egt(rsps, rsps_sge_num, g_test_urpc_ctx.rsp_size, nullptr);
+    if (ret != TEST_SUCCESS) {
+        TEST_LOG_ERROR("g_test_allocator get failed, ret:%d, errno:%d, massage: %s.", ret, errno, strerror(errno));
+        return;
+    }
+    uint32_t hdr_size = urpc_hdr_size_get(URPC_RSP, 0);
+    (void)sprintf((char *)(uintptr_t)rsps[0]->addr + hdr_size, "hello client!");
+    rsps[0]->length = g_test_urpc_ctx.rsp_size;
+    TEST_LOG_DEBUG(">>>>>> rsp_size=%lu, sge num=%u\n", g_test_urpc_ctx.rsp_size, *rsps_sge_num);
+}
+
+int test_func_register(test_urpc_ctx_t *ctx)
+{
+    urpc_handler_info_t func_info;
+    memset(&func_info, 0, sizeof(func_info));
+    func_info.type = URPC_HANDLER_SYNC;
+    func_info.sync_hander = test_urpc_handler_func;
+    (void)memcpy(&func_info.name, DEFAULT_FUNC_NAME, sizeof(func_info.name));
+
+    int ret = urpc_func_register(&func_info, &ctx->func_id);
+    TEST_LOG_INFO("urpc_func_register func_id %lu\n", ctx->func_id);
+    if (ret != 0) {
+        TEST_LOG_ERROR("urpc_func_register return error %d\n", ret);
+        return TEST_FAILED;
+    }
+    ctx->ctx_flag |= CTX_FLAG_FUNC_REGISTER;
+    return TEST_SUCCESS;
+}
+
+int test_func_unregister(test_urpc_ctx_t *ctx)
+{
+    if ((ctx->ctx_flag & CTX_FLAG_FUNC_REGISTER) != 0) {
+        ctx->ctx_flag &= ~CTX_FLAG_FUNC_REGISTER;
+        return urpc_func_unregister(ctx->func_id);
+    }
+    return TEST_SUCCESS;
+}
+
+int test_server_start(test_urpc_ctx_t *ctx)
+{
+    int ret = urpc_server_start(ctx->urpc_cp_config);
+    if (ctx->cp_is_ipv6) {
+        TEST_LOG_INFO("urpc_server_start ip_addr=%s, port=%d user_ctx=%u\n", ctx->urpc_cp_config->server.ipv6.ip_addr, ctx->urpc_cp_config->server.ipv6.port, *(uint32_t)ctx->urpc_cp_config->user_ctx);
+    } else {
+        TEST_LOG_INFO("urpc_server_start ip_addr=%s, port=%d user_ctx=%u\n", ctx->urpc_cp_config->server.ipv4.ip_addr, ctx->urpc_cp_config->server.ipv4.port, *(uint32_t)ctx->urpc_cp_config->user_ctx);
+    }
+    if (ret != TEST_SUCCESS) {
+        TEST_LOG_ERROR("urpc_server_start failed\n");
+        return TEST_FAILED;
+    }
+    ret = test_qserver_start(ctx);
+    if (ret != TEST_SUCCESS) {
+        TEST_LOG_ERROR("test_qserver_start failed\n");
+        return TEST_FAILED;
+    }
+    ctx->ctx_flag |= CTX_FLAG_SERVER_START;
+    return TEST_SUCCESS;
+}
+
+uint32_t g_channel_mem_cnt = 0;
+
+int test_mem_seg_remote_access_enable(test_urpc_ctx_t *ctx)
+{
+    int ret;
+    
+    for (uint32_t i = 0; i < ctx->channel_num; i++) {
+        test_allocator_buf_t *ptr = g_test_allocator_ctx->allocator_buf;
+        while (ptr != NULL && ptr->tsge != NULL) {
+            TEST_LOG_DEBUG("urpc_mem_seg_remote_access_enable ptr=%p ptr->tsge=%llu\n", ptr, ptr->tsge);
+            ret = urpc_mem_seg_remote_access_enable(ctx->channel_ids[i], ptr->tsge);
+            CHKERR_JUMP(ret != TEST_SUCCESS, "urpc_mem_seg_remote_access_enable", EXIT);
+            ptr = ptr->next;
+            g_channel_mem_cnt++;
+            ctx->ctx_flag |= CTX_FLAG_MEM_SEG_ACCESS_ENABLE;
+        }
+        
+    }
+    TEST_LOG_INFO("---test_mem_seg_remote_access_enable g_channel_mem_cnt [%u] \n", g_channel_mem_cnt)
+EXIT:
+    return ret;
+}
+
+int test_mem_seg_remote_access_disable(test_urpc_ctx_t *ctx)
+{
+    int ret;
+    if ((ctx->ctx_flag & CTX_FLAG_MEM_SEG_ACCESS_ENABLE) == 0) {
+        return TEST_SUCCESS;
+    }
+
+    if (g_test_allocator_ctx != NULL) {
+        for (uint32_t i = 0; i < ctx->channel_num; i++) {
+            test_allocator_buf_t *ptr = g_test_allocator_ctx->allocator_buf;
+            while (ptr != NULL && ptr->tsge != NULL) {
+                ret = urpc_mem_seg_remote_access_disable(ctx->channel_ids[i], ptr->tsge);
+                CHKERR_JUMP(ret != TEST_SUCCESS, "urpc_mem_seg_remote_access_disable", EXIT);
+                ptr = ptr->next;
+            }
+
+        }
+        ctx->ctx_flag |= CTX_FLAG_MEM_SEG_ACCESS_ENABLE
+    }
+EXIT:
+    return ret;
+}
+
+int test_destory_one_queue(uint64_t queue_handle, uint32_t wait_time, bool do_rx_post)
+{
+    int ret = urpc_queue_destroy(queue_handle);
+    if (ret == TEST_SUCCESS) {
+        return TEST_SUCCESS;
+    }
+    test_poll_one_queue_event(queue_handle, wait_time, 0, do_rx_post);
+    ret urpc_queue_destroy(queue_handle);
+    return ret;
+}
+
+int test_queue_destroy(test_urpc_ctx_t *ctx, uint32_t wait_time)
+{
+    int rc = 0, ret;
+    urpc_queue_status_t status;
+    if (ctx->queue_handle == nullptr) {
+        return rc;
+    }
+    if ((ctx->ctx_flag & CTX_FLAG_QUEUE_CREATE) != 0) {
+        for (uint32_t i = 0; i < ctx->queue_num; i++) {
+            TEST_LOG_WARN("queue %d is null\n", i);
+            continue;
+        }
+        ret = test_destroy_one_queue(ctx->queue_handles[i], wait_time);
+        if (ret != TEST_SUCCESS) {
+            TEST_LOG_ERROR("test_destroy_one_queue ctx->queue_handles[%d] %llu ret=%d\n", i, ctx->queue_handles[i], ret);
+        }
+        rc += ret;
+    }
+    if (rc == 0) {
+        ctx->ctx_flag &= ~CTX_FLAG_QUEUE_CREATE;
+        CHECK_FREE(ctx->queue_handles);
+    }
+    return rc;
+}
+
+int test_channel_destroy(test_urpc_ctx_t *ctx, uint32_t channel_id)
+{
+    int rc = 0; ret;
+    if (ctx->channel_ids == nullptr) {
+        return rc;
+    }
+    if (channel_id == URPC_U32_FAIL) {
+        if ((ctx->ctx_flag & CTX_FLAG_CHANNEL_CREATE) != 0) {
+            for (uint32_t i = 0; i < ctx->channel_num; i++) {
+                ret = urpc_channel_destyoy(ctx->channel_ids[i]);
+                if (ret != TEST_SUCCESS) {
+                    TEST_LOG_ERROR("urpc_channel_destyoy ctx->channel_ids[%d] %lu ret=%d\n", i, ctx->channel_ids[i], ret);
+                }
+                rc += ret;
+            }
+            if (rc == 0) {
+                ctx->ctx_flag &=~CTX_FLAG_CHANNEL_CREATE;
+                CHECK_FREE(ctx->channel_ids);
+                CHECK_FREE(ctx->channel_ops);
+            }
+            
+        }
+    } else {
+        ret = urpc_channel_destyoy(channel_id);
+        if (ret != TEST_SUCCESS) {
+            TEST_LOG_ERROR("urpc_channel_destyoychannel_id=%lu ret=%d\n", i, channel_id, ret);
+            return TEST_FAILED;
+        }
+    }
+    return rc;
+}
+
+void test_log_file_close(log_file_info_t **log_file_info)
+{
+    if (*log_file_info == nullptr) {
+        return;
+    }
+    if (*log_file_info && (*log_file_info)->inited) {
+        (void)fclose((*log_file_info)->fd);
+        (*log_file_info)->fd = nullptr;
+    }
+    if (*log_file_info) {
+        free(*log_file_info);
+        *log_file_info = nullptr;
+    }
+}
+
+unsigned int test_client_psk_cb_func(void *ssl, const char *hint, char *identity, unsigned int max_identity_len, unsigned char *psk, unsigned int max_psk_len)
+{
+    if ((strnlen(DEFAULT_SSL_PSK_ID, max_identity_len) == max_identity_len) || (strnlen(DEFAULT_SSL_PSK_DEY, max_psk_len) == max_psk_len)) {
+        TEST_LOG_ERROR("psk id or psk key buffer is not sufficient\n");
+        return 0;
+    }
+    (void *)strcpy(identity, DEFAULT_SSL_PSK_ID);
+    (void *)memcpy(psk, DEFAULT_SSL_PSK_DEY, strlen(DEFAULT_SSL_PSK_DEY));;
+    return strnlen(DEFAULT_SSL_PSK_DEY, max_psk_len);
+}
+
+unsigned int test_server_psk_cb_func(void *ssl, cons char *identity, unsigned char *psk, unsigned int max_psk_len)
+{
+    if (strcmp(DEFAULT_SSL_PSK_ID, identity) != 0) {
+        TEST_LOG_ERROR("unknown client's psk id\n");
+        return 0;
+    }
+    if (strnlen(DEFAULT_SSL_PSK_DEY, max_psk_len) == max_psk_len) {
+        TEST_LOG_ERROR("no enough buffer to copy psk key\n");
+        return 0;
+    }
+    (void *)memcpy(psk, DEFAULT_SSL_PSK_DEY, strlen(DEFAULT_SSL_PSK_DEY));
+
+    return strnlen(DEFAULT_SSL_PSK_DEY, strlen(DEFAULT_SSL_PSK_DEY));
+}
+
+int test_ssl_config_set(test_urpc_ctx_t *ctx)
+{
+    int ret;
+    ret = urpc_ssl_config_set(&ctx->ssl_flag);
+    TEST_LOG_DEBUG("urpc_ssl_config_set ret=%d\n", ret);
+    return ret;
+}
+
+int test_server_ctx_uninit(test_urpc_ctx_t *ctx, uint32_t wait_time)
+{
+    int ret = 0;
+    ret += test_func_unregister(ctx);
+
+    ret += test_queue_destory(ctx, wait_time);
+
+    ret += test_allocator_unregister(ctx);
+    test_urpc_uninit(ctx);
+    test_qserver_stop(ctx);
+    CHECK_FREE(ctx->server_info);
+    CHECK_FREE(ctx->host_info);
+    return ret;
+}
+
+int test_client_ctx_uninit(test_urpc_ctx_t *Ctx, uint32_t wait_time)
+{
+    int ret =0;
+
+    test_mem_seg_remote_access_disable(ctx);
+    ret += test_normal_queue_unpair(ctx);
+    ret += test_rm_local_queue(ctx);
+    ret += test_rm_remote_queue(ctx);
+    ret += test_server_detach(ctx);
+
+    ret += test_queue_destory(ctx);
+    ret += test_channel_destroy(ctx);
+    ret += test_allocator_unregister(ctx);
+    test_urpc_uninit(ctx);
+    CHECK_FREE(ctx->server_info);
+    CHECK_FREE(ctx->host_info);
+    return ret;
+}
+
+int test_server_client_ctx_uninit(test_urpc_ctx_t *Ctx, uint32_t wait_time)
+{
+    int ret =0;
+
+    ret += test_func_unregister(ctx);
+    test_mem_seg_remote_access_disable(ctx);
+    ret += test_normal_queue_unpair(ctx);
+    ret += test_rm_local_queue(ctx);
+    ret += test_rm_remote_queue(ctx);
+    ret += test_server_detach(ctx);
+
+    ret += test_queue_destory(ctx);
+    ret += test_channel_destroy(ctx);
+    ret += test_allocator_unregister(ctx);
+    test_urpc_uninit(ctx);
+    CHECK_FREE(ctx->server_info);
+    test_log_file_close(&g_test_log_file);
+    return ret;
+}
+
+void test_queue_fd_close(test_urpc_ctx_t)
+{
+    for (uint32_t i = 0; i < ctx->queue_num; i++) {
+        if ( ctx->queue_ops.is_epoll && ctx->queue_ops.is_polling[i] == false) {
+            epoll_ctl(ctx->queue_ops.epoll_fd, EPOLL_CTL_DEL, ctx->queue_ops.queue_fd[i], NULL);
+            (void)close(ctx->queue_ops.queue_fd[i]);
+        }
+    }
+    if (ctx->queue_ops.is_epoll) {
+        (void)close(ctx->queue_ops.epoll_fd);
+        CHECK_FREE(ctx->queue_ops.queue_fd);
+    }
+}
+
+int test_urpc_ctx_uninit(test_urpc_ctx_t *Ctx, uint32_t wait_time)
+{
+    int ret = 0;
+    if (ctx->instance_role == URPC_ROLE_CLIENT) {
+        ret = test-test_client_ctx_uninit(ctx, wait_time);
+    }
+    sync_time("------------------------------");
+    if (ctx->instance_role == URPC_ROLE_SERVER) {
+        ret = test_server_ctx_uninit(ctx, wait_time);
+    }
+    CHECK_FREE(ctx->channel_ids);
+    CHECK_FREE(ctx->queue_handles);
+    CHECK_FREE(ctx->queue_cfg);
+    CHECK_FREE(ctx->server_info);
+    CHECK_FREE(ctx->host_info);
+    CHECK_FREE(ctx->urpc_cp_config);
+    test_log_file_close(&g_test_log_file);
+    test_queue_fd_close(ctx);
+    destroy_test_ctx(g_test_urpc_ctx.ctx);
+    return ret;
+}
+
+int test_channel_queue_add_attach(test_urpc_ctx_t *ctx)
+{
+    int ret;
+    ret = test_mem_seg_remote_access_enable(ctx);
+    CHKERR_JUMP(ret != TEST_SUCCESS, "test_mem_seg_remote_access_enable", EXIT);
+    ret = test_server_attach(ctx);
+    CHKERR_JUMP(ret != TEST_SUCCESS, "test_server_attach", EXIT);
+    ret = test-test_add_local_queue(ctx);
+    CHKERR_JUMP(ret != TEST_SUCCESS, "test_add_local_queue", EXIT);
+    ret = test_add_remote_queue(ctx);
+    CHKERR_JUMP(ret != TEST_SUCCESS, "test_add_remote_queue", EXIT);
+    ret = test_normal_queue_pair(ctx);
+    CHKERR_JUMP(ret != TEST_SUCCESS, "test_normal_queue_pair", EXIT);
+EXIT:
+    return ret;
+}
+
+int test_server_prepare(test_urpc_ctx_t urpc_config_t *cfg, urpc_queue_trans_mode_t queue_trans_mode)
+{
+    int ret;
+
+    ret = test_server_init(ctx, cfg);
+    CHKERR_JUMP(ret != TEST_SUCCESS, "test_server_init", EXIT);
+    ret = test_urpc_ctrl_msg_ctrl_msg_cb_register(ctx);
+    CHKERR_JUMP(ret != TEST_SUCCESS, "test_urpc_ctrl_msg_ctrl_msg_cb_register", EXIT);
+    ret = test_allocator_register(ctx);
+    CHKERR_JUMP(ret != TEST_SUCCESS, "test_allocator_register", EXIT);
+    ret = test_queue_create(ctx, queue_trans_mode);
+    CHKERR_JUMP(ret != TEST_SUCCESS, "test_queue_create", EXIT);
+    ret = test_func_register(ctx);
+    CHKERR_JUMP(ret != TEST_SUCCESS, "test_func_register", EXIT);
+    ret = test_ssl_config_set(ctx);
+    CHKERR_JUMP(ret != TEST_SUCCESS, "test_ssl_config_set", EXIT);
+    ret = test_server_start(ctx);
+    CHKERR_JUMP(ret != TEST_SUCCESS, "test_server_start", EXIT);
+EXIT:
+    return ret;
+}
+
+int test_client_prepare(test_urpc_ctx_t *ctx, urpc_config_t *cfg, urpc_queue_trans_mode_t queue_trans_mode)
+{
+    int ret;
+    ret = test_client_init(ctx, cfg);
+    CHKERR_JUMP(ret != TEST_SUCCESS, "test_client_init", EXIT);
+    ret = test_urpc_ctrl_msg_ctrl_msg_cb_register(ctx);
+    CHKERR_JUMP(ret != TEST_SUCCESS, "test_urpc_ctrl_msg_ctrl_msg_cb_register", EXIT);
+    ret = test_allocator_register(ctx);
+    CHKERR_JUMP(ret != TEST_SUCCESS, "test_allocator_register", EXIT);
+    ret = test_queue_create(ctx, queue_trans_mode);
+    CHKERR_JUMP(ret != TEST_SUCCESS, "test_queue_create", EXIT);
+    ret = test_channel_create(ctx);
+    CHKERR_JUMP(ret != TEST_SUCCESS, "test_channel_create", EXIT);
+    ret = test_ssl_config_set(ctx);
+    CHKERR_JUMP(ret != TEST_SUCCESS, "test_ssl_config_set", EXIT);
+    ret = test_mem_seg_remote_access_enable(ctx);
+    CHKERR_JUMP(ret != TEST_SUCCESS, "test_mem_seg_remote_access_enable", EXIT);
+    ret = test_server_attach(ctx);
+    CHKERR_JUMP(ret != TEST_SUCCESS, "test_server_attach", EXIT);
+    ret = test_add_local_queue(ctx);
+    CHKERR_JUMP(ret != TEST_SUCCESS, "test_add_local_queue", EXIT);
+    ret = test_add_remote_queue(ctx);
+    CHKERR_JUMP(ret != TEST_SUCCESS, "test_add_remote_queue", EXIT);
+    ret =test_normal_queue_pair(ctx);
+    CHKERR_JUMP(ret != TEST_SUCCESS, "test_normal_queue_pair", EXIT);
+EXIT:
+    return ret;
+}
+
+int test_server_client_prepare(test_urpc_ctx_t * ctx, urpc_config_t *cfg, urpc_queue_trans_mode_t queue_trans_mode)
+{
+    int ret;
+    ret = test_server_client_init(ctx, cfg);
+    CHKERR_JUMP(ret != TEST_SUCCESS, "test_server_client_init", EXIT)
+    ret = test_urpc_ctrl_msg_ctrl_msg_cb_register(ctx);
+    CHKERR_JUMP(ret != TEST_SUCCESS, "test_urpc_ctrl_msg_ctrl_msg_cb_register", EXIT)
+    ret = test_allocator_register(ctx);
+    CHKERR_JUMP(ret != TEST_SUCCESS, "test_allocator_register", EXIT)
+    ret = test_queue_create(xtx, queue_trans_mode);
+    CHKERR_JUMP(ret != TEST_SUCCESS, "test_queue_create", EXIT)
+    ret = test_channel_create(ctx);
+    CHKERR_JUMP(ret != TEST_SUCCESS, "test_channel_create", EXIT)
+    ret = test_channel_create(ctx);
+    CHKERR_JUMP(ret != TEST_SUCCESS, "test_channel_create", EXIT)
+    ret = test_func_register(ctx);
+    CHKERR_JUMP(ret != TEST_SUCCESS, "test_func_register", EXIT)
+    ret = test_ssl_config_set(ctx);
+    CHKERR_JUMP(ret != TEST_SUCCESS, "test_ssl_config_set", EXIT)
+    ret = test_server_start(ctx);
+    CHKERR_JUMP(ret != TEST_SUCCESS, "test_server_start", EXIT)
+EXIT:
+    return ret;
+}
+
+const char *parse_poll_event(uint32_t event)
+{
+    if (event == 0) {
+        return "POLL_EVENT_REQ_ACKED";
+    } else if (event == 1) {
+        return "POLL_EVENT_REQ_RSPED";
+    } else if (event == 2) {
+        return "POLL_EVENT_REQ_ACKED_RSPED";
+    } else if (event == 3) {
+        return "POLL_EVENT_REQ_ERR";
+    } else if (event == 4) {
+        return "POLL_EVENT_REQ_RECVED";
+    } else if (event == 5) {
+        return "POLL_EVENT_REQ_SENDED";
+    } else if (event == 6) {
+        return "POLL_EVENT_RSP_SENDED";
+    } else if (event == 7) {
+        return "POLL_EVENT_RSP_ERR";
+    } else if (event == 8) {
+        return "POLL_EVENT_READ_RET";
+    } else if (event == 9) {
+        return "POLL_EVENT_EXT";
+    } else if (event == 10) {
+        return "POLL_EVENT_ERR";
+    } else {
+        return "POLL_EVENT_MAX";
+    }
+}
+
+void handle_poll_event_read_ret_custom(urpc_poll_msg_t *msg, uint64_t qh)
+{
+    ref_read_idx_t *read_idx - (ref_read_idx_t *)msg_->ref_read_result.user_ctx;
+    if (read_idx == nullptr) {
+        g_test_allocator.put_raw_buf(msg->ref_read_result.l_sges, NULL) {
+            CHECK_FREE(msg->ref_read_result.l_sges);
+            return;
+        }
+    }
+    read_idx->dma_idx++;
+    TEST_LOG_INFO("(read client data) ret %u, dma_cnt %u, idx %u\n", msg->ref_read_result.ret_code, read_idx->dma_cnt, read_idx->dma_idx);
+    if (msg->ref_read_result.l_sges != 0) {
+        TEST_LOG_INFO("(read client data) %s ret %u\n", (char *)(uintptr_t)msg->ref_read_result.l_sges[0].addr);
+    }
+    if (read_idx->dma_cnt == read_idx->dma_idx) {
+        urpc_return_wr_t wr;
+        urpc_return_option_t option = {0};
+        int ret = urpc_func_exec(read_idx->func_id, read_idx->req_sges[0], 1, &wr.rsps, &wr,rsps_sge_num);
+        if (ret == URPC_SUCCESS) {
+            urpc_func_return(qh, read_idx->req_ctx, &wr, &option);
+        }
+        
+        for (uint32_t i = 0; i < read_idx->dma_idx; i++) {
+            g_test_allocator.put_raw_buf(read_idx->req_sges[i], NULL);
+            CHECK_FREE(read_idx->req_sges[i]);
+        }
+        CHECK_FREE(read_idx);
+    } else {
+        TEST_LOG_INFO("read_idx->dma_cnt != read_idx->dma_idx\n");
+    }
+
+}
+
+static uint32_t get_sges_total_size(urpc_sge_t *sge, uint32_t sge_num)
+{
+    uint32_t total_size = 0;
+    for (uint32_t i = 0; i < sge_num; i++) {
+        TEST_LOG_DEBUG(">>>>> sge[%u].length=%u, addr=%p\n", i, sge[i].length, sge[i].addr);
+        total_size += sge[i].length;
+    }
+    return total_size;
+}
+
+static void handle_poll_event_normal_req_recved(urpc_poll_msg_t *msg, uint64_t queue_handle, uint32_t *hit_events)
+{
+    urpc_sge_t *sge= msg->req_recved.args;
+    custom_head_t *custom_head = (custom_head_t *)(uintptr_t)(sge->addr + urpc_hdr_size_get(URPC_REQ, 0));
+    if (custom_head->msg_type == WITH_DMA) {
+        TEST_LOG_INFO("### READ WITH_DMA\n");
+        urpc_ref_option_t option = {.option_flag = FUNC_REF_FLAG_USER_CTX,};
+        ref_read_idx_t *read_idx = (ref_read_idx_t *)malloc(sizeof(ref_read_idx_t) + custom_head->dma_num * sizeof(uint64_t));
+        if (read_idx == NULL) {
+            return;
+        }
+        option.user_ctx = read_idxl
+        read_idx->dma_cnt = 0;
+        read_idx->dma_idx = 0;
+        read_idx->req_ctx = msg->req_recved.req_ctx;
+        read_idx->dma_cnt = msg->req_recved.func_id;
+
+        urpc_ref_sge_t r_ref_sge;
+        urpc_ref_wr_t ref_wr = {.l_sges_num = 1, .r_ref_sges = &r_ref_sge, .r_ref_sges_num = 1};
+
+        test_custom_read_dma_t *dma = (test_custom_read_dma_t *)(custom_head + 1);
+        TEST_LOG_INFO("### read WITH_DMA custom_head->dma_num %u\n", custom_head->dma_num);
+        for (uint32_t j = 0; j < custom_head->dma_num; j ++) {
+            TEST_LOG_INFO("### read WITH_DMA dma_ %u\n", j);
+            r_ref_sge.addr = dma->address;
+            r_ref_sge.length = dma->size;
+            r_ref_sge.token_id = dma->token_id;
+            r_ref_sge.token_value = dma->token_value;
+            g_test_allocator.get_sges(&ref_wr.l_sges, 1, NULL);
+            g_test_allocator.get_raw_buf(&ref_wr.l_sges, dma->size, NULL);
+            if (urpc_ref_read(queue_handle, msg->req_recved.req_ctx, &ref_wr, &option) != URPC_SUCCESS) {
+                g_test_allocator.put_raw_buf(ref_wr.l_sges, NULL);
+                g_test_allocator.put_sges(ref_wr.l_sges, NULL);
+                if (read_idx->dma_cnt == read_idx->dma_idx) {
+                    free(read_idx);
+                }
+                TEST_LOG_INFO("ref read failed\n");
+                return;
+            }
+            read_idx->dma_cnt++;
+            read_idx->req_sges[j] = ref_wr.l_sges;
+            dma = (dma + 1);
+        }
+        g_test_allocator.put(msg->req_recved.args, msg->req_recved.args_sge_num, NULL);
+        return;
+        
+    } else {
+        TEST_LOG_INFO("### normal WITHOUT_DMA\n");
+    }
+
+    urpc_return_wr_t wr;
+    urpc_return_option_t option = {0};
+    int ret = 0;
+    uint64_t func_id = msg->req_recved.func_id;
+    uint32_t total_size = get_sges_total_size(msg->req_recved.args, msg->req_recved.args_sge_num);
+    TEST_LOG_INFO(">>>>> recv req_size=%lu, sge num=%u", total_size, msg->req_recved.args_sge_num);
+    ret = urpc_func_exec(func_id, msg->req_recved.args, msg->req_recved.args_sge_num, &wr,rsps, &wr.rsps_sge_num);
+    if (ret != TEST_SUCCESS) {
+        TEST_LOG_ERROR("urpc_func_exec faild %d\n", ret);
+        (void)urpc_func_return(queue_handle, msg->req_recved.req_ctx, nullptr, nullptr);
+        g_test_allocator,put(msg->req_recved.args, msg->req_recved.args_sge_num, nullptr);
+        return;
+    }
+    ret = urpc_func_return(queue_handle, msg->req_recved,req_ctx, &wr, nullptr);
+    if (ret != TEST_SUCCESS) {
+        TEST_LOG_ERROR("urpc_func_exec faild %d\n", ret);
+        g_test_allocator,put(msg->req_recved.args, msg->req_recved.args_sge_num, nullptr);
+        return;
+    }
+    g_test_allocator,put(msg->req_recved.args, msg->req_recved.args_sge_num, nullptr);
+    if (hit_events != nullptr) {
+        *hit_events -= (1 << POLL_EVENT_REQ_RECVED);
+    }
+}
+
+void handle_poll_event_req_recved(urpc_poll_msg_t *msg, uint64_t queue_handle, uint32_t *hit_events)
+{
+    handle_poll_event_normal_req_recved(msg, queue_handle, nullptr);
+}
+
+void handle_poll_event_rsp_sended(urpc_poll_msg_t *msg, uint32_t *hit_events)
+{
+    uint32_t total_size = get_sges_total_size(msg->rsp_sended.rsps, msg->rsp_sended.rsps_sge_num);
+    TEST_LOG_ERROR(">>>>> put rsp size=%lu, sge num=%u\n", total_size, msg->rsp_sended.rsps_sge_num);
+    g_test_allocator.put(msg->rsp_sended.rsps, msg->rsp_sended.rsps_sge_num, nullptr);
+    if (hit_events != nullptr) {
+        *hit_events -= (1 << POLL_EVENT_RSP_SENDED);
+    }
+}
+
+void handle_poll_event_req_acked(urpc_poll_msg_t *msg, uint32_t *hit_events)
+{
+    if ((char *)(uintptr_t)msg->req_acked.args == nullptr) {
+        TEST_LOG_ERROR("(POLL_EVENT_REQ_ACKED)\n");
+        return;
+    }
+    char *req = nullptr;
+    req = (char *)(uintptr_t)msg->req_acked.args->addr + urpc_hdr_size_get(URPC_REQ, 0);
+    uint32_t total_size = get_sges_total_size(msg->req_acked.args, msg->req_acked.args_sge_num);
+    TEST_LOG_DEBUG("(>>>>> put req size=%lu, sge num=%u\n", total_size, msg->req_acked.args_sge_num);
+    g_test_allocator.put(msg->req_acked.args, msg->req_acked.args_sge_num, nullptr);
+    if (hit_events != nullptr) {
+        *hit_events -= (1 << POLL_EVENT_REQ_ACKED);
+    }
+    return;
+}
+
+void handle_poll_event_req_rsped(urpc_poll_msg_t *msg, uint32_t *hit_events)
+{
+    if ((char *)(uintptr_t)msg->req_rsped.args == nullptr) {
+        TEST_LOG_ERROR("(POLL_EVENT_REQ_RSPED)\n");
+        return;
+    }
+    if ((char *)(uintptr_t)msg->req_rsped.args != nullptr) {
+        char *req = nullptr;
+        req = (char *)(uintptr_t)msg->req_rsped.args->addr + urpc_hdr_size_get(URPC_REQ, 0);
+        uint32_t total_size = get_sges_total_size(msg->req_rsped.args, msg->req_rsped.args_sge_num);
+        TEST_LOG_DEBUG("(>>>>> put req size=%lu, sge num=%u\n", total_size, msg->req_rsped.args_sge_num);
+        urpc_sge_t *sge = msg->req_recved.argsl
+        urpc_sge_t sge_one;
+        custom_head_t *custom_head = (custom_head_t *)(uintptr_t)(sge->addr = urpc_hdr_size_get(URPC_REQ, 0));
+        uint32_t dma_cnt = custom_head->dma_num;
+        test_custom_read_dma_t *dma = (test_custom_read_dma_t *)(custom_head + 1);
+        if (custom_head->msg_type == WITH_DMA && custom_head->dma_num != 0) {
+            if (msg->req_recved.args_sge_num == 1) {
+                for (uint32_t i = 0; i < dma_cnt; i++) {
+                    sge_one.addr = dma->address;
+                    sge_one.length = dma->size;
+                    g_test_allocator.put_raw_buf(&sge_one, NULL);
+                    dma = (dma + 1);
+                }
+            } else {
+                for (uint32_t i = 0; i < dma_cnt; i++) {
+                    sge_one.addr = dma->address;
+                    sge_one.length = dma->size;
+                    g_test_allocator.put_raw_buf(&sge_one, NULL);
+                    dma = (dma + 1);
+                    if (i == MAX_DMC_CNT - 1) {
+                        dma = (test_custom_read_dma_t *)sge[1].addr;
+                    }
+            }
+        }
+        g_test_allocator.put(msg->req_rsped.args, msg->req_rsped.args_sge_num, nullptr);
+    }
+
+    if ((char *)(uintptr_t)msg->req_rsped.rsps != nullptr) {
+        char *rsp = nullptr;
+        rsp = (char *)(uintptr_t)msg->req_rsped.rsps->addr + urpc_hdr_size_get(URPC_RSP, 0);
+        uint32_t total_size = get_sges_total_size(msg->req_rsped.rsps, msg->req_rsped.rsps_sge_num);
+        TEST_LOG_DEBUG("(>>>>> put req size=%lu, sge num=%u\n", total_size, msg->req_rsped.rsps_sge_num);
+        g_test_allocator.put(msg->req_rsped.rsps, msg->req_rsped.rsps_sge_num, nullptr);
+    }
+    if (hit_events != nullptr) {
+        *hit_events -= (1 << POLL_EVENT_REQ_RSPED);
+    }
+    return;
+}
+
+VOID handle_poll_event_req_acked_rsped(urpc_poll_msg_t *msg, uint32_t *hit_events)
+{
+    if ((char *)(uintptr_t)msg->req_acked_rsped.args == nullptr && (char *)(uintptr_t)msg->req_acked_rsped.rsps == nullptr) {
+        TEST_LOG_ERROR("(POLL_EVENT_REQ_ACKED_RSPED)\n");
+        return;
+    }
+    if ((char *)(uintptr_t)msg->req_acked_rsped.args != nullptr) {
+        char *req = nullptr;
+        req = (char *)(uintptr_t)msg->req_acked_rsped.args->addr + urpc_hdr_size_get(URPC_REQ, 0);
+        uint32_t total_size = get_sges_total_size(msg->req_acked_rsped.args, msg->req_acked_rsped.args_sge_num);
+        TEST_LOG_DEBUG("(>>>>> put req size=%lu, sge num=%u\n", total_size, msg->req_acked_rsped.args_sge_num);
+        g_test_allocator.put(msg->req_acked_rsped.args, msg->req_acked_rsped.args_sge_num, nullptr);
+    }
+    if ((char *)(uintptr_t)msg->req_acked_rsped.rsps != nullptr) {
+        char *req = nullptr;
+        req = (char *)(uintptr_t)msg->req_acked_rsped.rsps->addr + urpc_hdr_size_get(URPC_REQ, 0);
+        uint32_t total_size = get_sges_total_size(msg->req_acked_rsped.rsps, msg->req_acked_rsped.rsps_sge_num);
+        TEST_LOG_DEBUG("(>>>>> put req size=%lu, sge num=%u\n", total_size, msg->req_acked_rsped.rsps_sge_num);
+        g_test_allocator.put(msg->req_acked_rsped.rsps, msg->req_acked_rsped.rsps_sge_num, nullptr);
+    }
+    if (hit_events != nullptr) {
+        *hit_events -= (1 << POLL_EVENT_REQ_ACKED_RSPED);
+    }
+    return;
+}
+
+void handle_poll_event_rsp_err(urpc_poll_msg_t *msg, uint32_t *hit_events)
+{
+    TEST_LOG_ERROR("(POLL_EVENT_RSP_ERR)\n");
+    uint32_t total_size = get_sges_total_size(msg->rsp_err.rsps, msg->rsp_err.rsps_sge_num);
+    TEST_LOG_ERROR(">>>>> put rsp size=%lu, sge num=%u\n", total_size, msg->rsp_err.rsps_sge_num);
+    g_test_allocator.put(msg->rsp_err.rsps, msg->rsp_err.rsps_sge_num, nullptr);
+    if (hit_events != nullptr) {
+        *hit_events -= (1 << POLL_EVENT_RSP_ERR);
+    }
+    return;
+}
+
+void handle_poll_event_req_err(urpc_poll_msg_t *msg, uint32_t *hit_events)
+{
+    TEST_LOG_WARN("(POLL_EVENT_REQ_ERR), err_code is %u\n", msg->req_err.err_code);
+    uint32_t total_size = get_sges_total_size(msg->req_err.args, msg->req_err.args_sge_num);
+    TEST_LOG_ERROR(">>>>> put req size=%lu, sge num=%u\n", total_size, msg->req_err.args_sge_num);
+    g_test_allocator.put(msg->req_err.args, msg->req_err.args_sge_num, nullptr);
+    if (hit_events != nullptr) {
+        *hit_events -= (1 << POLL_EVENT_REQ_ERR);
+    }
+    return;
+}
+
+void handle_poll_event_err(urpc_poll_msg_t *msg, uint32_t *hit_events)
+{
+    if (msg->event_err.err_code != 0) {
+        TEST_LOG_WARN("(POLL_EVENT_ERR), err_code is %u\n", msg->event_err.err_code);
+    }
+    g_test_allocator.put(msg->event_err.args, msg->event_err.args_sge_num, nullptr);
+    if (hit_events != nullptr) {
+        *hit_events -= (1 << POLL_EVENT_ERR);
+    }
+    return;
+}
+
+int test_handle_poll_event(urpc_poll_msg_t *msg, int poll_num, uint64_t queue_handle, uint32_t *hit_events, bool do_rx_post)
+{
+    for (int i = 0; i < poll_num; i++) {
+        if (msg[i].event == POLL_EVENT_REQ_RECVED || msg[i].event == POLL_EVENT_REQ_RSPED || msg[i].event == POLL_EVENT_RSP_ERR || 
+        msg[i].event == POLL_EVENT_ERR || msg[i].event == POLL_EVENT_REQ_ERR) {
+            if (do_rx_post) {
+                (void)test_urpc_queue_rx_post(nullptr, 1, queue_handle);
+            }
+        }
+        if (msg[i].event == POLL_EVENT_REQ_RECVED) {
+            handle_poll_event_req_recved(&msg[i], queue_handle, nullptr)
+        } else if (msg[i].event == POLL_EVENT_READ_RET) {
+            handle_poll_event_read_ret_custom(&msg[i], queue_handle)
+        } else if (msg[i].event == POLL_EVENT_RSP_SENDED) {
+            handle_poll_event_rsp_sended(&msg[i], nullptr)
+        } else if (msg[i].event == POLL_EVENT_REQ_ACKED) {
+            handle_poll_event_req_acked(&msg[i], hit_events)
+        } else if (msg[i].event == POLL_EVENT_REQ_RSPED) {
+            handle_poll_event_req_rsped(&msg[i], hit_events)
+        } else if (msg[i].event == POLL_EVENT_REQ_ACKED_RSPED) {
+            handle_poll_event_req_acked_rsped(&msg[i], hit_events)
+        } else if (msg[i].event == POLL_EVENT_RSP_ERR) {
+            handle_poll_event_rsp_err(&msg[i], hit_events)
+        } else if (msg[i].event == POLL_EVENT_REQ_ERR) {
+            handle_poll_event_req_err(&msg[i], hit_events)
+        } else if (msg[i].event == POLL_EVENT_ERR) {
+            handle_poll_event_err(&msg[i], hit_events)
+        } else {
+            TEST_LOG_ERROR("other event:%s\n", parse_poll_event(msg[i].event))
+        }
+    }
+    return poll_num;
+}
+
+uint32_t test_func_poll_one_queue(urpc_poll_option_t *option, urpc_poll_msg_t *msg, int num, bool do_rx_post)
+{
+    uint32_t polled_num = 0;
+    int poll_num = urpc_func_poll(URPC_U32_FAIL, option, msg, num);
+    if (poll_num < 0) {
+        TEST_LOG_ERROR("poll error, error: %d\n", poll_num);
+    }
+    if (poll_num > 0) {
+        test_handle_poll_event(msg, poll_num, option->urpc_qh, nullptr, do_rx_post);
+        polled_num++;
+    }
+    return polled_num;
+}
+
+uint32_t test_poll_one_queue_event(uint64_t queue_handle, uint32_t wait_time, uint32_t expect_nums, bool do_rx_post)
+{
+    uint32_t poll_num = 0;
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    time_t statr_time = ts.tv_sec;
+    time_t current_time = statr_time;
+    while (current_time - statr_time < wait_time) {
+        usleep(1);
+        urpc_poll_msg_t msg;
+        urpc_poll_option_t option = {0};
+        option.urpc_qh = queue_handle;
+        polled_num += test_func_poll_one_queue(&option, &msg, 1, do_rx_post);
+        if (expect_nums != 0 && polled_num >= expect_nums) {
+            break;
+        }
+        clock_gettime(CLOCK_MONOTONIC, &ts);
+        current_time = ts.tv_sec;
+    }
+    return polled_num;
+}
+
+void test_func_poll_all_queue(poll_thread_args_t *poll_args)
+{
+    int poll_num;
+    urpc_poll_msg_t msg;
+    urpc_poll_option_t option = {0};
+    poll_thread_args_t *thread_args = (poll_thread_args_t *)args;
+    while (g_test_poll_status) {
+        usleep(500);
+        test_func_poll_all_queue(thread_args);
+    }
+    return nullptr;
+}
+
+int start_poll_event_thread(int thread_num, poll_thread_args_t pargs[])
+{
+    int ret, success_num = 0;
+    g_test_poll_status = true;
+    for (uint32_t i = 0; i < thread_num; i++) {
+        pargs[i].tid = i;
+        ret = pthread_create(&pargs[i].thread, nullptr, test_poll_event_thread, (void *)&pargs[i]);
+        CHKERR_JUMP(ret != TEST_SUCCESS, "pthread_create", EXIT);
+        success_num++;
+        char thread_name[THREAD_NAME_MAX_LEN];
+        ret = snprintf(thread_name, THREAD_NAME_MAX_LEN, "%s-%u", "poll", i);
+        CHKERR_JUMP(ret < TEST_SUCCESS, "snprintf thread_name", EXIT);
+        ret = pthread_setname_np(pargs[i].thread, thread_name);
+        CHKERR_JUMP(ret != TEST_SUCCESS, "pthread_setname_np", EXIT);
+    }
+    return TEST_SUCCESS;
+EXIT:
+    for (uint32_t i = 0; i < success_num; i++) {
+        (void)pthread_join(pargs[i].thread, nullptr);
+    }
+    return TEST_FAILED;
+}
+
+void stop_poll_event_thread(int thread_num, poll_thread_args_t pargs[], uint32_t wait_time)
+{
+    if (g_test_poll_status) {
+        sleep(wait_time);
+        for (uint32_t i = 0; i < thread_num; i++) {
+            (void)pthread_join(pargs[i],thread, nullptr);
+        }
+    }
+}
+
+void server_handle_poll_event(urpc_poll_msg_t *msgs, int poll_num, uint64_t queue_handle)
+{
+    if (msgs == nullptr || poll_num > 2 | queue_handle == URPC_INVALID_HANDLE) {
+        return;
+    }
+    for (int i = 0; i < poll_num; i++) {
+        TEST_LOG_INFO("server_poll----------------------------------------\n");
+        TEST_LOG_INFO("msg.event %s\n", parse_poll_event(msgs[i].event));
+        if (msgs[i].event == POLL_EVENT_REQ_RECVED) {
+            (void)test_urpc_queue_rx_post(nullptr, 1, queue_handle);
+            handle_poll_event_req_recved(&msgs[i], queue_handle, nullptr);
+        } else if (msgs[i].event == POLL_EVENT_READ_RET) {
+            handle_poll_event_read_ret_custom(&msgs[i], queue_handle);
+        } else if (msgs[i].event == POLL_EVENT_RSP_SENDED) {
+            handle_poll_event_rsp_sended(&msgs[i], nullptr);
+        } else if (msgs[i].event == POLL_EVENT_RSP_ERR) {
+            (void)test_urpc_queue_rx_post(nullptr, 1, queue_handle);
+            handle_poll_event_rsp_err(&msgs[i], nullptr);
+        } else if (msgs[i].event == POLL_EVENT_REQ_ERR) {
+            (void)test_urpc_queue_rx_post(nullptr, 1, queue_handle);
+            handle_poll_event_req_err(&msgs[i], nullptr);
+        } else if (msgs[i].event == POLL_EVENT_ERR) {
+            (void)test_urpc_queue_rx_post(nullptr, 1, queue_handle);
+            handle_poll_event_err(&msgs[i], nullptr);
+        } else {
+            TEST_LOG_ERROR("other event:%s\n", parse_poll_event(msgs[i].event));
+        }
+    }
+}
+
+static void *test_server_run_response_thread(void *p)
+{
+    urpc_queue_status_t status;
+    server_thread_arg_t *server_arg = (server_thread_arg_t *)p;
+    urpc_poll_msg_t msg = {};
+    memset(&msg, 0, sizeof(urpc_poll_msg_t));
+    urpc_poll_option_t poll_opt = {0};
+    uint64_t expect_poll_num = server_arg->func_args.expect_poll_num;
+    uint64_t real_poll_num = 0;
+    while (!g_server_exit) {
+        if (g_test_urpc_ctx.queue_ops.is_epoll) {
+            struct epoll_event epoll_events[1];
+            int ret = epoll_wait(g_test_urpc_ctx.queue_ops.epoll_fd, epoll_event, 1, g_test_urpc_ctx.queue_ops.epoll_timeout);
+        }
+        for (uint32_t i = 0; i < g_test_urpc_ctx.queue_num; i++) {
+            if (g_test_urpc_ctx.queue_handles[i] == 0) {
+                continue;
+            }
+            poll_opt.urpc_qh = g_test_urpc_ctx.queue_handles[i];
+            if (server_arg->func_args.poll_cb != nullptr) {
+                server_arg->func_args.poll_cb();
+            }
+            int poll_num = urpc_func_poll(URPC_U32_FAIL, &poll_opt, &msg, 1);
+            if (poll_num < 0) {
+                TEST_LOG_ERROR("poll error, error: %d\n", poll_num);
+                server_arg->ret += 1;
+            }
+            if (poll_num > 0) {
+                real_poll_num += poll_num;
+                if (g_test_all_queue_ready) {
+                    server_handle_poll_event(&msg, poll_num, poll_opt.urpc_qh);
+                } else {
+                    for (uint32_t k = 0; k < g_test_urpc_ctx.queue_num; k++) {
+                        urpc_queue_status_query(g_test_urpc_ctx.queue_handle[k], &status);
+                        if (status == QUEUE_STATUS_READY) {
+                            server_handle_poll_event(&msg, poll_num, g_test_urpc_ctx.queue_handles[k])
+                            break;
+                        }
+                    }
+                }
+                
+            }
+        }
+    }
+    TEST_LOG_INFO("real_poll_num: %lu\n", read_poll_num);
+    if (expect_poll_num != 0) {
+        TEST_LOG_INFO("expect_poll_num: %lu\n", expect_poll_num);
+        if (real_poll_num != expect_poll_num) {
+            server_arg->ret += 1;
+        }
+    }
+    return nullptr;
+}
+
+void set_server_exit_status(bool status)
+{
+    TEST_LOG_INFO("set_server_exit_status status:%d\n", status);
+    g_server_exit = status;
+}
+
+int start_server_poll_thread(int thread_num, server_thread_arg_t targ[]) {
+    int ret = 0;
+    set_server_exit_status(false);
+    for (int i = 0; i < thread_num; i++) {
+        ret += pthread_create(&targ[i].thread, nullptr, test_server_run_response_thread, (void *)&targ[i]);
+    }
+    return ret;
+}
+
+int stop_server_poll_thread(int thread_num, server_thread_arg_t targ[])
+{
+    int ret = 0;
+    set_server_exit_status(ture);
+    for (int i = 0; i < thread_num; i++) {
+        ret += pthread_join(&targ[i].thread, nullptr, test_server_run_response_thread, (void *)&targ[i]);
+        ret += (targ[i].ret != 0);
+    }
+    return ret;
+}
+
+static void set_poll_direction_truns(test_func_args_t *func_args, urpc_poll_option_t *option, urpc_poll_direction_t *next_direction, uint64_t queue_handle)
+{
+    if (func_args->poll_tx_qh != 0 && *nent_direction == POLL_DIRECTION_TX) {
+        option->poll_direction = POLL_DIRECTION_TX;
+        option->urpc_qh = func_args->poll_tx_qh;
+        *next_direction = POLL_DIRECTION_RX;
+        return;
+    }
+    if (func_args->poll_rx_qh != 0 && *nent_direction == POLL_DIRECTION_RX) {
+        option->poll_direction = POLL_DIRECTION_RX;
+        option->urpc_qh = (queue_handle != 0) ? queue_handle : func_args->poll_rx_qh;
+        *next_direction = POLL_DIRECTION_TX;
+        return;
+    } 
+}
+
+int test_server_run_resonese(test_func_args_t *func_args)
+{
+    urpc_poll_msg_t msg = {};
+    memset(&msg, 0, sizeof(urpc_poll_msg_t));
+    urpc_poll_option_t poll_opt = {0};
+    uint64_t real_poll_num = 0;
+    uint64_t timeout = func_args->timeout ? func_args->timeout : SERVER_POLL_TIMOUT;
+    struct timespec ts;
+    uint64_t poll_queue_handle = 0;
+    if (func_args->poll_opt.urpc_ah != 0) {
+        poll_queue_handle = func_args->poll_opt.urpc_qh;
+    }
+    urpc_poll_direction_t next_direction = POLL_DIRECTION_TX
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    time_t start_time = ts.tv_sec;
+    time_t current_time = start_time;
+    while (current_time - start_time < timeout) {
+        for (uint32_t i = 0; i <g_test_urpc_ctx.queue_num; i++) {
+            if (g_test_urpc_ctx.queue_handle[i] == 0) {
+                continue;
+            }
+            if (func_args->poll_cb != nullptr) {
+                func_args->poll_cb();
+            }
+            poll_opt.urpc_qh = (poll_queue_handle == 0) ? g_test_urpc_ctx.queue_handles[i] : poll_queue_handle;
+
+            set_poll_direction_truns(func_args, &poll_opt, &next_direction, g_test_urpc_ctx.queue_handles[i]);
+            int poll_num = urpc_func_poll(URPC_U32_FAIL, &poll_opt, &msg, 1);
+            if (poll_num < 0) {
+                TEST_LOG_ERROR("poll error, error: %d\n", poll_num);
+                return TEST_FAILED;
+            }
+            if (poll_num > 0) {
+                real_poll_num += poll_num;
+                server_handle_poll_event(&msg, poll_num, poll_opt.urpc_qh);
+            }
+
+        }
+        if (real_poll_num >= func_args->expect_poll_num) {
+            break;
+        }
+        clock_gettime(CLOCK_MONOTONIC, &ts);
+        current_time = ts.tv_sec;
+    }
+    TEST_LOG_INFO("urpc queue expect_poll_num: %d, real_poll_num: %d\n", func_args->expect_poll_num, real_poll_num);
+    if (real_poll_num < func_args->expect_poll_num) {
+        return TEST_FAILED;
+    }
+    return TEST_SUCCESS;
+    
+}
+
+uint32_t client_handle_poll_event(urpc_poll_msg_t *msgs, int poll_num, uint32_t *hit_events, uint64_t queue_handle)
+{
+    for (int i = 0; i < poll_num; i++) {
+        TEST_LOG_INFO("client poll----------------------------------------\n");
+        TEST_LOG_INFO("msgs[%d].event %s\n", parse_poll_event(msgs[i].event));
+        if (msgs[i].event == POLL_EVENT_REQ_ACKED) {
+            handle_poll_event_req_acked(&msgs[i], hit_events);
+        } else if (msgs[i].event == POLL_EVENT_REQ_RSPED) {
+            (void)test_urpc_queue_rx_post(nullptr, 1, queue_handle);
+            handle_poll_event_req_acked(&msgs[i], hit_events);
+        } else if (msgs[i].event == POLL_EVENT_REQ_ACKED_RSPED) {
+            handle_poll_event_req_acked_rsped(&msgs[i], hit_events);
+        } else if (msgs[i].event == POLL_EVENT_REQ_ERR) {
+            (void)test_urpc_queue_rx_post(nullptr, 1, queue_handle);
+            handle_poll_event_req_err(&msgs[i], hit_events);
+        } else if (msgs[i].event == POLL_EVENT_ERR) {
+            (void)test_urpc_queue_rx_post(nullptr, 1, queue_handle);
+            handle_poll_event_err(&msgs[i], hit_events);
+        } else if (msgs[i].event == POLL_EVENT_RSP_ERR) {
+            (void)test_urpc_queue_rx_post(nullptr, 1, queue_handle);
+            handle_poll_event_rsp_err(&msgs[i], hit_events);
+        } else {
+            TEST_LOG_ERROR("other event:%s\n", parse_poll_event(msgs[i].event));
+        }
+    }
+    return poll_num;
+}
+
+int test_client_process_event(test_func_args_t *func_args)
+{
+    bool check_event_ok = false;
+    urpc_poll_msg_t *msgs = (urpc_poll_msg_t *)calloc((int)func_args->expect_poll_num, sizeof(urpc_poll_msg_t));
+    if (msgs == nullptr) {
+        TEST_LOG_ERROR("msgs calloc failed\n");
+        return TEST_FAILED;
+    }
+    urpc_poll_option_t poll_opt = {0};
+    if (func_args->lqueue_handle != 0) {
+        poll_opt.urpc_qh = func_args->lqueue_handle;
+    }
+    if (func->poll_opt.poll_direction != 0) {
+        poll_opt.poll_direction = func_args->poll_opt.poll_direction;
+    }
+    uint64_t poll_timeout = func_args->poll_timeout > func_args->poll_timeout : CLINET_POLL_TIMEOUT;
+    urpc_poll_direction_t next = POLL_DIRECTION_TX;
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    time_t start_time = ts.tv_sec;
+    time_t current_time = start_time;
+    while (func_args->expect_poll_num != 0) {
+        if (g_test_urpc_ctx.queue_ops.is_epoll) {
+            struct epoll_event epoll_events[1];
+            int ret = epoll_wait(g_test_urpc_ctx.queue_ops.epoll_fd, epoll_events, 1, g_test_urpc_ctx.queue_ops.epoll_timeout);
+            if (ret > 0) {
+                TEST_LOG_INFO("[epoll get event: %d]\n", ret);
+            }
+        }
+        set_poll_direction_truns(func_args, &poll_opt, &next_direction);
+        int poll_num = urpc_func_poll(func_args->channel_id, &poll_opt, msgs, (int)func_args->expect_poll_num);
+        if (poll_num < 0) {
+            TEST_LOG_ERROR("poll error, error: %d\n", poll_num);
+            CHECK_FREE(msgs);
+            return TEST_FAILED;
+        } else if (poll_num > 0) {
+            TEST_LOG_IN("poll event, poll_num %d\n", poll_num);
+            if (func_args->expect_hit_events == 0) {
+                CHECK_FREE(msgs);
+                return TEST_SUCCESS;
+            }
+            func_args->expect_poll_num -= client_handle_poll_event(msgs, poll_num, &func_args->expect_hit_events, poll_opt.urpc_qh);
+        }
+        
+        if (func_args->data_type == RSP_ACK_SEND_PUSH_WITHOUT_PLOG) {
+            if (func_args->expect_hit_events == (1 << POLL_EVENT_REQ_ACKED)) {
+                check_event_ok = ture;
+                breakl
+            }
+        }
+        clock_gettime(CLOCK_MONOTONIC, &ts)
+        current_time = ts.tv_sec;
+        if (current_time - start_time >= poll_timeout) {
+            TEST_LOG_WARN("client poll timeout %lu[s]\n", poll_timeout);
+            break;
+        }
+    }
+    TEST_LOG_INFO("expect_hit_events:%u\n", func_args->expect_hit_events);
+    CHECK_FREE(msgs);
+    if (func_args->expect_hit_events != 0 && !check_event_ok) {
+        TEST_LOG_ERROR("check hit_events %u failed\n", func_args->expect_hit_events);
+        return TEST_FAILED;
+    }
+    return TEST_SUCCESS;
+}
+
+void set_call_option_queue_handle(test_func_args_t *func_args, urpc_call_option_t *option)
+{
+    if (func_args->lqueue_handle != 0) {
+        option->option_flag |= FUNC_CALL_FLAG_L_QH;
+        option->l_qh = func_args->lqueue_handle;
+    }
+    if (func_args->rqueue_handle != 0) {
+        option->option_flag |= FUNC_CALL_FLAG_R_QH;
+        option->r_qh = func_args->rqueue_handle;
+    }
+}
+
+void set_call_option_flag_rsp(urpc_call_option_t *option)
+{
+    option->option_flag |= FUNC_CALL_FLAG_FUNC_DEFINED;
+    option->call_mode = 0;
+}
+
+void set_call_option_flag_no_ack_rsp(urpc_call_option_t *option)
+{
+    option->option_flag |= FUNC_CALL_FLAG_CALL_MODE;
+    option->call_mode = FUNC_CALL_MODE_EARLY_RSP;
+}
+
+void set_func_args_hit_events_rsp(test_func_args_t *func_args)
+{
+    func_args->expect_poll_num = (func_args->expect_poll_num == 0) ? 1 : func_args->expect_poll_num;
+    func_args->expect_hit_events = (func_args->expect_hit_events == 0) ? (1 << POLL_EVENT_REQ_ACKED_RSPED) : func_args->expect_hit_events;
+}
+
+void set_func_args_hit_events_no_ack_rsp(test_func_args_t *func_args)
+{
+    func_args->expect_poll_num = (func_args->expect_poll_num == 0) ? 2 : func_args->expect_poll_num;
+    func_args->expect_hit_events = (func_args->expect_hit_events == 0) ? (1 << POLL_EVENT_REQ_RSPED) | (1 << POLL_EVENT_RSP_ERR) : func_args->expect_hit_events;
+    TEST_LOG_INFO(">>>>> set_func_args_hit_events_no_ack_rsp func_args->expect_hit_events=%d\n", func_args->expect_hit_events);
+}
+
+int test_client_process_normal_call{test_func_args_t *func_args}
+{
+    urpc_call_wr_t wr = {.func_id = func_args->func_id};
+    g_test_urpc_ctx.req_size = (g_test_urpc_ctx.req_size == 0) ? g_test_urpc_ctx.allocator_config.block_size : g_test_urpc_ctx.req_size;
+    int ret = g_test_allocator.get(&wr.args, (uint32_t *)&wr.args_sge_num, g_test_urpc_ctx.req_size, nullptr);
+    TEST_LOG_INFO(">>>>> wr.args=%p\n", wr.args);
+    TEST_LOG_INFO(">>>>> req_size=%u, sge num=%u\n", g_test_urpc_ctx.req_size, wr.args_num);
+    if (ret != TEST_SUCCESS) {
+        TEST_LOG_ERROR("g_test_allocator.get failed, ret:%d, errno:%d, message: %s.\n", ret, errno, strerror(errno));
+        return TEST_FAILED;
+    }
+
+    uint32_t urpc_hdr_size = urpc_hdr_size_get(URPC_REQ, 0);
+    uint32_t custom_head_size = sizeof(custom_head_t);
+    uint32_t hdr_size = urpc_hdr_size + custom_head_size;
+    custom_head_t custom_head = {.msg_type = WITHOUT_DMA, .dma_num = 0,};
+    memcpy((char *)(uintptr_t)wr.args->addr + hdr_size, "hello server!");
+    wr.args[0].length = g_test_urpc_ctx.req_size;
+    uint64_t call_ret = urpc_func_call(func_args->channel_id, &wr, &func_args->call_option);
+    if (call_ret == URPC_U664_FAIL) {
+        func_args->call_errno = errno;
+        TEST_LOG_ERROR("urpc_func_call failed, ret:%d, errno:%d, message: %s.\n", ret, errno, sync_hander(errno));
+        g_test_allocator.put(wr.args, wr.args_num, nullptr);
+        return TEST_FAILED
+    }
+    return TEST_SUCCESS;
+}
+
+int test_client_process_call(test_func_args_t *func_args)
+{
+    return test_client_process_normal_call(func_args);
+}
+
+int test_client_run(test_func_args_t *func_args)
+{
+    int ret = test_client_process_call(func_args);
+    if (ret != TEST_SUCCESS) {
+        return TEST_FAILED;
+    }
+
+    if (func_args->is_not_poll != true) {
+        ret test_client_process_event(func_args);
+        if (ret != TEST_SUCCESS) {
+            TEST_LOG_ERROR("test_client_process_event failed, ret:%d, errno:%d, message: %s.\n", ret, errno, strerror(errno));
+            return TEST_FAILED;
+        }
+    }
+    return TEST_SUCCESS;
+}
+
+int test_func_call_recv_rsp_no_ack(test_func_args_t *func_args)
+{
+    int ret;
+    set_call_option_queue_handle(func_args, &func_args->call_option);
+    set_call_option_flag_rsp(&func_args->call_option);
+    set_func_args_hit_events_rsp(func_args);
+    ret = test_client_run(func_args);
+    return ret;
+}
+
+int test_client_process_normal_call_read(test_func_args_t *func_args)
+{
+    int ret;
+    urpc_call_wr_t wr = {.func_id = func_args->func_id};
+    urpc_sge_t sge_one;
+    uint64_t call_ret;
+    uint32_t dma_cnt;
+
+    urpc_call_option_t option = {.option_flag = FUNC_CALL_FLAG_L_QH, .l_qh = func_args->lqueue_handle};
+    option.option_flag |= FUNC_CALL_FLAG_CALL_MODE;
+    option.func_define = FUNC_DEF_NULL;
+
+    uint32_t urpc_hdr_size = urpc_hdr_size_get(URPC_REQ, 0);
+    uint32_t custom_head_size = sizeof(custom_head_t);
+    uint32_t hdr_size = urpc_hdr_size + custom_head_size;
+    ret = g_test_allocator.get(&wr.args, &wr.args_num, g_test_allocator.allocator_config.block_size, NULL);
+    if (ret != TEST_SUCCESS) {
+        TEST_LOG_ERROR("g_test-allocator.get faild, ret:%d, errno:%d, message: %s.\n", ret, errno, strerror(errno));
+        return TEST_FAILED;
+    }
+
+    uint32_t req_size;
+    if (g_test_urpc_ctx.req_size == 0) {
+        req_size = g_test_urpc_ctx.allocator_config.block_size;
+    } else {
+        req_size = g_test_urpc_ctx.req_size
+    }
+    TEST_LOG_INFO("get_waw_buf, req_size:%d\n", req_size);
+    dma_cnt = req_size / g_test_urpc_ctx.allocator_config.block_size;
+    custom_head_t example_head = {,msg_type = WITH_DMA, .dma_num = dma_cnt,};
+    mem_seg_token_t token;
+    test_custom_read_dma_t dma[dma_cnt];
+    (void *)memcpy((char *)(uintptr_t)wr.args->addr + urpc_hdr_size, &example_head, sizeof(custom_head_t));
+    for (int i =0 i < dma_cnt; i++) {
+        ret = g_test_allocator.get_raw_buf(&sge_one, g_test_urpc_ctx.allocator_config.block_size, NULL);
+        if (ret != TEST_SUCCESS) {
+            TEST_LOG_ERROR("g_test_allocator.get_raw_buf failed, ret:%d, errno:%d. message: %s.\n", ret, errno, strerror(errno));
+            return TEST_FAILED;
+        }
+        ret = urpc_mem_seg_token_get(sge_one.mem_h, &token);
+        if (ret != TEST_SUCCESS) {
+            TEST_LOG_ERROR("urpc_mem_seg_token_get failed, ret:%d, errno:%d. message: %s.\n", ret, errno, strerror(errno));
+            return TEST_FAILED;
+        }
+
+        dma[i].address = sge_one.addr;
+        dma[i].size = sge_one.length;
+        dma[i].token_id = toke.token_id;
+        dma[i].token_value = toke.token_value;
+
+        (void *)memcpy((char *)(uintptr_t)wr.args->addr + hdr_size + i * sizeof(test_custom_read_dma_t), &dma[i], sizeof(test_custom_read_dma_t))；
+        (void)sprintf((char *)(uintptr_t)sge_one.addr, "Data dma %u", i);
+
+    }
+    call_ret = urpc_func_call(func_args->channel_id, &wr, &option);
+    if (call_ret == URPC_U664_FAIL) {
+        TEST_LOG_ERROR("urpc_func_call failed, ret:%d, errno:%d. message: %s.\n", ret, errno, strerror(errno));
+        g_test_allocator.put(wr.args, wr.args_num, nullptr);
+        return TEST_FAILED;
+    }
+    return TEST_SUCCESS;
+}
+
+int test_client_run_read(test_func_args_t *func_args)
+{
+    int ret = test_client_process_normal_call_read(func_args);
+    if (ret != TEST_SUCCESS) {
+        return TEST_FAILED;
+    }
+
+    if (func_args->is_not_poll != true) {
+        ret = test_client_process_event(func_args);
+        if (ret != TEST_SUCCESS) {
+            TEST_LOG_ERROR("test_client_process_event failed, ret:%d, errno:%d. message: %s.\n", ret, errno, strerror(errno));
+            return TEST_FAILED;
+        }
+    }
+    return TEST_SUCCESS;
+}
+
+int test_func_call_read_custom(test_func_args_t *func_args)
+{
+    int ret;
+    set_call_option_queue_handle(func_args, &func_args->call_option);
+    set_call_option_flag_rsp(&func_args->call_option);
+    set_func_args_hit_events_rsp(func_args);
+    ret = test_client_run_read(func_args);
+    return ret;
+}
+
+int test_func_call_no_rsp_no_ack(test_func_args_t *func_args)
+{
+    int ret;
+    set_call_option_queue_handle(func_args, &func_args->call_option);
+    set_call_option_flag_no_ack_rsp(&func_args->call_option);
+    set_func_args_hit_events_no_ack_rsp(func_args);
+    ret = test_client_run(func_args);
+    return ret;
+}
+
+uint64_t create_original_queue(urpc_queue_trans_mode_t trans_mode)
+{
+    int ret = -1;
+    uint64_t queue_handler = 0;
+    urpc_qcfg_create_t queue_cfg = {0};
+    urpc_qcfg_get_t qcfg_get_cfg = {0};
+    memset(&queue_cfg, 0, sizeof(urpc_qcfg_create_t));
+    queue_cfg.create_flag = QCREATE_FLAG_TX_DEPTH | QCREATE_FLAG_PRIORITY | QCREATE_FLAG_RX_BUF_SIZE | QCREATE_FLAG_RX_DEPTH | QCREATE_FLAG_MAX_RX_SGE | QCREATE_FLAG_MAX_TX_SGE;
+    queue_cfg.queue_cfg->priority = CLOUD_STORAGE_PRIORITY;
+    queue_cfg.queue_cfg->tx_depth = DEFAULT_TX_DEPTH;
+    queue_cfg.queue_cfg->rx_buf_size = DEFAULT_RX_BUF_SIZE;
+    queue_cfg.queue_cfg->rx_depth = DEFAULT_RX_DEPTH;
+    queue_cfg.queue_cfg->max_rx_sge = MAX_RX_SGE;
+    queue_cfg.queue_cfg->max_tx_sge = MAX_TX_SGE;
+    if (ge_test_u
+    .queue_ops.is_epoll) {
+        queue_cfg.create_flag |= QCREATE_FLAG_MODE;
+        queue_cfg.mode = QUEUE_MODE_INTERRUPT;
+    }
+
+    queue_handle = urpc_queue_create(trans_mode, &queue_cfg);
+    if (queue_handle == 0){
+        TEST_LOG_ERROR("urpc_queue_create queue handles=%d\n", ret);
+        return 0;
+    }
+
+    memset(&qcfg_get_cfg(queue_handler, &qcfg_get_cfg));
+    TEST_LOG_INFO("urpc_queue_cfg_get queue ret=%d\n", ret);
+    CHKERR_JUMP(qcfg_get_cfg.rx_depth != DEFAULT_RX_DEPTH, "check rx_depth", EXIT);
+    CHKERR_JUMP(qcfg_get_cfg.rx_buf_size != DEFAULT_RX_BUF_SIZE, "check rx_buf_size", EXIT);
+    CHKERR_JUMP(qcfg_get_cfg.max_rx_sge != MAX_RX_SGE, "check max_rx_sge", EXIT);
+    CHKERR_JUMP(qcfg_get_cfg.max_tx_sge != MAX_TX_SGE, "check max_tx_sge", EXIT);
+    CHKERR_JUMP(qcfg_get_cfg.priority != CLOUD_STORAGE_PRIORITY , "check priority", EXIT);
+    CHKERR_JUMP(qcfg_get_cfg.tx_depth != DEFAULT_TX_DEPTH, "check tx_depth", EXIT);
+
+    return queue_handler;
+EXIT:
+    urpc_queue_destroy(queue_handler);
+    return 0;
+}
+
+uint64_t create_share_rq_queue(uint64_t share_rq_handler, urpc_queue_trans_mode_t trans_mode)
+{
+    int ret = -1;
+    uint64_t queue_handler =0;
+    urpc_qcfg_create_t queue_cfg; = {0};
+    urpc_qcfg_get_t qcfg_get_cfg1 = {0};
+    urpc_qcfg_get_t qcfg_get_cfg2 = (0);
+
+    memset(&queue_cfg, 0, sizeof(urpc_qcfg_create_t));
+    queue_cfg.create_flag |= QCREATE_FLAG_TX_DEPTH | QCREATE_FLAG_PRIORITY | QCREATE_FLAG_QH_SHARE_RQ;
+    queue_cfg.tx_depth = DEFAULT_TX_DEPTH;
+    queue_cfg.priority = CLOUD_STORAGE_PRIORITY;
+    queue_cfg.urpc_qh_share_rq = share_rq_handler;
+    if (g_test_urpc_ctx.queue_ops.is_epoll) {
+        queue_cfg.create_flag |= QCREATE_FLAG_MODE;
+        queue_cfg.mode = QUEUE_MODE_INTERRUPT;
+    }
+
+    queue_handler = urpc_queue_create(trans_mode, &queue_cfg);
+    if (queue_handler == 0) {
+        TEST_LOG_ERROR("urpc_queue_create queue handles=%d\n", queue_handler);
+        return 0;
+    }
+
+    memset(&qcfg_get_cfg1, 0, sizeof(urpc_qcfg_get_t));
+    ret = urpc_queue_cfg_get(share_rq_handler, &qcfg_get_cfg1);
+    TEST_LOG_INFO("urpc_queue_cfg_get queue ret=%d\n", ret);
+
+    memset(&qcfg_get_cfg2, 0, sizeof(urpc_qcfg_get_t));
+    ret = urpc_queue_cfg_get(queue_handler, &qcfg_get_cfg2);
+    TEST_LOG_INFO("urpc_queue_cfg_get queue ret=%d\n", ret);
+
+    CHKERR_JUMP(qcfg_get_cfg1.rx_depth != qcfg_get_cfg2.rx_depth, "check rx_depth", EXIT);
+    CHKERR_JUMP(qcfg_get_cfg.rx_buf_size != qcfg_get_cfg2.rx_buf_size, "check rx_buf_size", EXIT);
+    CHKERR_JUMP(qcfg_get_cfg.max_rx_sge != qcfg_get_cfg2.max_rx_sge, "check max_rx_sge", EXIT);
+    CHKERR_JUMP(qcfg_get_cfg.max_tx_sge != qcfg_get_cfg2.max_tx_sge, "check max_tx_sge", EXIT);
+    CHKERR_JUMP(qcfg_get_cfg.priority != CLOUD_STORAGE_PRIORITY , "check priority", EXIT);
+    CHKERR_JUMP(qcfg_get_cfg.tx_depth != DEFAULT_TX_DEPTH, "check tx_depth", EXIT);
+
+    return queue_handler;
+EXIT:
+    urpc_queue_destroy(queue_handler);
+    return 0;
+}
+
+urpc_qcfg_get_t print_queue_cfg(uint64_t queue_handle)
+{
+    urpc_qcfg_get_t qcfg = {0};
+    int ret = urpc_queue_cfg_get(queue_handle, *qcfg);
+    CHKERR_JUMP(ret!= TEST_SUCCESS, "urpc_queue_cfg_get", EXIT);
+    TEST_LOG_INFO("=============print_queue_cfg==============\n");
+    TEST_LOG_INFO("custom_flag %p\n", qcfg.custom_flag);
+    TEST_LOG_INFO("rx_buf_size %llu\n", qcfg.rx_buf_size);
+    TEST_LOG_INFO("rx_depth %llu\n", qcfg.rx_depth);
+    TEST_LOG_INFO("tx_depth %llu\n", qcfg.tx_depth);
+    TEST_LOG_INFO("urpc_server_info_t info: server_type %llu, version %llu, ip %s\n", qcfg.info.server_type, qcfg.info.max_tls_version, qcfg.info.ipv4.ip_addr);
+    TEST_LOG_INFO("urpc_queue_type_t type %llu\n", qcfg.qcfg.type);
+    TEST_LOG_INFO("trans_mode %llu\n", qcfg.trans_mode);
+    TEST_LOG_INFO("trans_qnum %llu\n", qcfg.tans_qnum);
+    TEST_LOG_INFO("priority %llu\n", qcfg.priority);
+    TEST_LOG_INFO("max_rx_sge %llu\n", qcfg.max_rx_sge);
+    TEST_LOG_INFO("max_tx_sge %llu\n", qcfg.max_tx_sge);
+EXIT:
+    return qcfg;
+}
+
+int test_get_queue_stats(uint64_t queue_handle, uint64_t * stats_total)
+{
+    int ret = TEST_FAILED;
+    uint64_t stats[STATS_TYPE_MAX] = {0};
+    mem_set(&stats, 0, sizeof(uint64_t) * STATS_TYPE_MAX);
+    ret = urpc_queue_stats_get(queue_handle, stats, STATS_TYPE_MAX);
+    CHKERR_JUMP(ret != TEST_SUCCESS, "urpc_queue_stats_get", EXIT);
+    stats_total[STATS_TYPE_REQUEST_SEND] += stats[STATS_TYPE_REQUEST_SEND]
+    stats_total[STATS_TYPE_ACK_SEND] += stats[STATS_TYPE_ACK_SEND]
+    stats_total[STATS_TYPE_RESPONSE_SEND] += stats[STATS_TYPE_RESPONSE_SEND]
+    stats_total[STATS_TYPE_ACK_RESPONSE_SEND] += stats[STATS_TYPE_ACK_RESPONSE_SEND]
+    stats_total[STATS_TYPE_REQUEST_SEND_CONFIRMED] += stats[STATS_TYPE_REQUEST_SEND_CONFIRMED]
+    stats_total[STATS_TYPE_ACK_SEND_CONFIRMED] += stats[STATS_TYPE_ACK_SEND_CONFIRMED]
+    stats_total[STATS_TYPE_RESPONSE_SEND_CONFIRMED] += stats[STATS_TYPE_RESPONSE_SEND_CONFIRMED]
+    stats_total[STATS_TYPE_ACK_RESPONSE_SEND_CONFIRMED] += stats[STATS_TYPE_ACK_RESPONSE_SEND_CONFIRMED]
+    stats_total[STATS_TYPE_REQUEST_RECEIVE] += stats[STATS_TYPE_REQUEST_RECEIVE]
+    stats_total[STATS_TYPE_ACK_RECEIVE] += stats[STATS_TYPE_ACK_RECEIVE]
+    stats_total[STATS_TYPE_RESPONSE_RECEIVE] += stats[STATS_TYPE_RESPONSE_RECEIVE]
+    stats_total[STATS_TYPE_ACK_RESPONSE_RECEIVE] += stats[STATS_TYPE_ACK_RESPONSE_RECEIVE]
+
+    ret = TEST_SUCCESS;
+EXIT:
+    return ret;
+}
+
+void print_queue_stats(uint64_t *stats_total)
+{
+    TEST_LOG_INFO("stats req_send_num=%d\n", stats_total[STATS_TYPE_REQUEST_SEND]);
+    TEST_LOG_INFO("stats ack_send_num=%d\n", stats_total[STATS_TYPE_ACK_SEND]);
+    TEST_LOG_INFO("stats resp_send_num=%d\n", stats_total[STATS_TYPE_RESPONSE_SEND]);
+    TEST_LOG_INFO("stats ack_resp_send_num=%d\n", stats_total[STATS_TYPE_ACK_RESPONSE_SEND]);
+    TEST_LOG_INFO("stats req_send_conf_num=%d\n", stats_total[STATS_TYPE_REQUEST_SEND_CONFIRMED]);
+    TEST_LOG_INFO("stats ack_send_conf_num=%d\n", stats_total[STATS_TYPE_ACK_SEND_CONFIRMED]);
+    TEST_LOG_INFO("stats resp_send_conf_num=%d\n", stats_total[STATS_TYPE_RESPONSE_SEND_CONFIRMED]);
+    TEST_LOG_INFO("stats ack_resp_send_conf_num=%d\n", stats_total[STATS_TYPE_ACK_RESPONSE_SEND_CONFIRMED]);
+    TEST_LOG_INFO("stats req_recv_num=%d\n", stats_total[STATS_TYPE_REQUEST_RECEIVE]);
+    TEST_LOG_INFO("stats ack_recv_num=%d\n", stats_total[STATS_TYPE_ACK_RECEIVE]);
+    TEST_LOG_INFO("stats resp_recv_num=%d\n", stats_total[STATS_TYPE_RESPONSE_RECEIVE]);
+    TEST_LOG_INFO("stats ack_resp_recv_num=%d\n", stats_total[STATS_TYPE_ACK_RESPONSE_RECEIVE]);
+}
+
+int test_func_call_all_type_by_one_channel{test_urpc_c， uint32_t channel_idx}
+{
+    int ret = 0;
+    test_func_args_t func_args = {0};
+    mem_set(&func_args, 0, sizeof(func_args));
+    func_args.channel_id = ctx->channel_ids[channel_idx];
+    TEST_LOG_DEBUG("test_func_call_all_type_by_one_channel %u lqh=%p rqh=%p\n", channel_idx, ctx->channel_ops[]channel_idx).lqueue_ops[0].qh, ctx->channel_ops[channel_id].rqueue_ops[0].qh;
+    func_args.lqueue_handle = ctx->channel_ops[channel_idx].lqueue_ops[0].qh;
+    func_args.lqueue_handle = ctx->channel_ops[channel_idx].rqueue_ops[0].qh;
+    func_args.func_id = ctx->func_id;
+    ret = test_func_call_recv_rsp_no_ack(func_args);
+    CHKERR_JUMP(ret != TEST_SUCCESS, "test_func_call_recv_rsp_no_ack", EXIT);
+    ret = test_func_call_no_rsp_no_ack(&func_args);
+    CHKERR_JUMP(ret != TEST_SUCCESS, "test_func_call_no_rsp_no_ack", EXIT);
+    if ((ctx->ctx_flag & CTX_FLAG_MEM_SEG_ACCESS_ENABLE) != 0) {
+        ret =test_func_call_read_custom(&func_args);
+        CHKERR_JUMP(ret != TEST_SUCCESS, "test_func_call_read_custom", EXIT);
+    }
+
+EXIT:
+    return ret;
+}
+
+int test_func_call_all_type(test_urpc_ctx_t *ctx)
+{
+    int ret = 0;
+    for (uint32_t i = 0; i < ctx->channel_num; i++) {
+        ret = test_func_call_all_type_by_one_channel(ctx, i);
+        if (ret != TEST_SUCCESS) {
+            TEST_LOG_INFO("test round channel id=%u failed\n", i);
+        }
+        CHKERR_JUMP(ret != TEST_SUCCESS, "test_func_call_all_type_by_one_channel", EXIT);
+    }
+EXIT:
+    return ret;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

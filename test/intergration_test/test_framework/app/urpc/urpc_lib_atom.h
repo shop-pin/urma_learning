@@ -85,8 +85,8 @@
 #define ACK_SEND_PUSH_WITHOUT_PLOG 3
 #define NO_ACK_RSP_SEND_PUSH_WITHOUT_PLOG 4
 
-#define MAX_RX_SGHE 4
-#define MAX_TX_SGHE 13
+#define MAX_RX_SHE 4
+#define MAX_TX_SHE 13
 
 #define ASYNC_FLAG_ENABLE 4
 #define ASYNC_FLAG_NOT_EPOLL 5
@@ -258,7 +258,7 @@ typedef struct {
 
 typedef enum test_msg_type {
     WITHOUT_DMA,
-    WITHDMA,
+    WITH_DMA,
 } test_msg_type_t;
 
 typedef struct custom_head {
