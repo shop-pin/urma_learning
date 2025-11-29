@@ -173,6 +173,7 @@ def exec_test_case(host_list, path, server_num=1, client_num=1, rand_host=True, 
     if check is True:
         for i range(app_num):
             log.info(f'----------------- [ Test p{i + 1}.wait() ] ------------------')
+            p_list[i].wait()
 
         for i in range(app_num):
             log.info(f'----------------- [ Test assert p{i + 1} ] ------------------')

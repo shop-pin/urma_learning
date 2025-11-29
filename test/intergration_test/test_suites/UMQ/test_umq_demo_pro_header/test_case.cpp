@@ -20,30 +20,22 @@
             default:
                 break;
         }
+        ctx->cfg.headroom_size = TEST_DATA_HEADER_SIZE
+        test_data_args_t data_args = {};
+
         ret = test_umq_prepare(ctx);
         CHKERR_JUMP(ret != TEST_SUCCESS, "test_umq_prepare", EXIT);
         sync_time("------------------------------1");
-        for (int j = 0; j < UMQ_MAX_WR_COUNT * 2; j++) {
-            TEST_LOG_INFO("\n\nLoop i = %d, j = %d\n", i, j);
-            sync_time("------------------------------11");
-            if (ctx->app_id == PROC_2) {
-                ret = test_umq_post_tx_buf(&ctx->umqh_ops[0]);
-                CHKERR_JUMP(ret != TEST_SUCCESS, "test_umq_post_tx_buf", EXIT);
-            }
-            sync_time("------------------------------22");
-            if (ctx->app_id == PROC_1) {
-                ret = test_umq_poll_rx_buf(&ctx->umqh_ops[0]);
-                CHKERR_JUMP(ret != TEST_SUCCESS, "test_umq_poll_rx_buf", EXIT);
-            }
-            if (ctx->app_id == PROC_2) {
-                ret = test_umq_poll_tx_buf(&ctx->umqh_ops[0]);
-                CHKERR_JUMP(ret != TEST_SUCCESS, "test_umq_poll_tx_buf", EXIT);
-            }
-            sync_time("------------------------------33");
-            if (ctx->app_id == PROC_1) {
-                ret = test_umq_post_rx(ctx, 1);
-                CHKERR_JUMP(ret != TEST_SUCCESS, "test_umq_post_rx", EXIT);
-            }
+        if (ctx->app_id == PROC_2) {
+            data_args.umqh_ops = &ctx->umqh_op[0]
+            ret = test_umq_pro_func_req(data_args);
+            CHKERR_JUMP(ret != TEST_SUCCESS, "test_umq_pro_func_req", EXIT);
+        }
+        sync_time("------------------------------2");
+        if (ctx->app_id == PROC_1) {
+            data_args.umqh_ops = &ctx->umqh_op[0]
+            ret = test_umq_pro_func_rsp(&data_args);
+            CHKERR_JUMP(ret != TEST_SUCCESS, "test_umq_pro_func_rsp", EXIT);
         }
         ret = test_umq_undo_prepare(ctx);
         CHKERR_JUMP(ret != TEST_SUCCESS, "test_umq_undo_prepare", EXIT);

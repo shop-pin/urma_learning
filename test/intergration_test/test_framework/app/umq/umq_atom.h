@@ -162,7 +162,7 @@ int test_umq_unbind_one(umqh_ops_t *umqh_ops);
 int test_umq_bind(test_umq_ctx_t *ctx);
 int test_umq_unbind(test_umq_ctx_t *ctx);
 int test_umq_prepare(test_umq_ctx_t *ctx);
-int test_umq_undo_pre_pare(test_umq_ctx_t *ctx);
+int test_umq_undo_prepare(test_umq_ctx_t *ctx);
 
 uint64_t get_buf_alloc_umqh(umqh_ops_t *umqh_ops, uint32_t data_size);
 umq_buf_t *test_umq_buf_alloc(umqh_ops_t *umqh_ops, umq_alloc_option_t *option, const char *data, uint32_t data_size);

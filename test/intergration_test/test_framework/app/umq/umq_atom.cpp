@@ -141,7 +141,7 @@ test_umq_ctx_t *test_umq_ctx_init(int argc, char * argv[], int thread_num)
 
 int test_umq_ctx_uninit(test_umq_ctx_t *ctx)
 {
-    int ret = test_umq_undo_pre_pare(ctx);
+    int ret = test_umq_undo_prepare(ctx);
     destroy_test_ctx(g_test_umq_ctx.ctx);
     return ret;
 }
@@ -508,7 +508,7 @@ EXIT:
     return ret;
 }
 
-int test_umq_undo_pre_pare(test_umq_ctx_t *ctx)
+int test_umq_undo_prepare(test_umq_ctx_t *ctx)
 {
     int ret = TEST_FAILED;
     ret = test_umq_unbind(ctx);
