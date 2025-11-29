@@ -21,7 +21,7 @@ import os
 import sys
 import random
 
-from import prepare_test_case
+from app.ums.ums_app import prepare_test_case
 
 local_path = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(local_path))
@@ -40,7 +40,7 @@ class Test(UBUSFeature):
         log.info('--------- [ Test teardown ] ---------')
         super(Test, self).teardown()
 
-    def test_ums_smoke_fallback_multiple(self):
+    def test_ums_smoke_ums_single(self):
         log.info(f'--------- [ Test local_path = {local_path} ] ---------')
         self.exec_test_case(local_path=local_path)
 

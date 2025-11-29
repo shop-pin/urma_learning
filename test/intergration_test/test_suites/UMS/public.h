@@ -1,11 +1,11 @@
 /*
  * SPDX-License-Identifier: MT
  * Copyright (c) Huawei Technologies Co., Ltd. 2024-2024. All rights reserved.
- * Description: dlock example
+ * Description: ums example
  */
-#ifndef DLOCK_H
-#define DLOCK_H
+#ifndef UMS_H
+#define UMS_H
 
-#include "dlock_atom.h"
+#include "ums_atom.h"
 
 #endif

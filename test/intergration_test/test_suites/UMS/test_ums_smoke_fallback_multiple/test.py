@@ -21,7 +21,7 @@ import os
 import sys
 import random
 
-from import prepare_test_case
+from app.ums.ums_app import prepare_test_case
 
 local_path = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(local_path))
