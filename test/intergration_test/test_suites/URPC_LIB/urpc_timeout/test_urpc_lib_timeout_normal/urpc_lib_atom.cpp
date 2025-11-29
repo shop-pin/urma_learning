@@ -3184,7 +3184,7 @@ void print_queue_stats(uint64_t *stats_total)
     TEST_LOG_INFO("stats ack_resp_recv_num=%d\n", stats_total[STATS_TYPE_ACK_RESPONSE_RECEIVE]);
 }
 
-int test_func_call_all_type_by_one_channel{test_urpc_ctx_t, uint32_t channel_idx}
+int test_func_call_all_type_by_one_channel{test_urpc_c， uint32_t channel_idx}
 {
     int ret = 0;
     test_func_args_t func_args = {0};

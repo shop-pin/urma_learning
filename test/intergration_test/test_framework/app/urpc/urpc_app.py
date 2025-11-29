@@ -32,7 +32,7 @@ def exec_shell(host_list, _cmd)
             log.error(f'exec_shell failed! _cmd is {_cmd}')
             raise
 
-def prepare_test_Case_urpc_lib(host_list, case_patj, debug=False)
+def prepare_test_case_urpc_lib(host_list, case_patj, debug=False)
     common_path = f'{local_path}/../common'
 
     case_cpp = os.path.join(case_path, "test_case.cpp")

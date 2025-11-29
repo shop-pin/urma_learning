@@ -40,6 +40,6 @@ clas Test(UBUSFeature):
         log_info('---------- [ Test teardown ] ----------')
         super(Test, self).teardown()
 
-    def test_urpclib_interrupt_func_normal(self):
+    def test_urpclib_ctrl_msg_repeate_attach_refresh(self):
         log_info(f'---------- [ Test local_path = {local_path} ] ----------')
         exec_test_case(self.host_list, local_path, rand_host=False)
