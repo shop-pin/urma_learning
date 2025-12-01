@@ -70,8 +70,8 @@ int umq_ub_bind_impl(uint64_t umqh, uint8_t *bind_info, uint32_t bind_info_size)
 int umq_ub_unbind_impl(uint64_t umqh);
 umq_state_t umq_ub_state_get_impl(uint64_t umqh_tp);
 
-int32_t umq_ub_register_memory_impl(uint8_t *ub_ctx, void *buf, uint64_t size);
-void umq_ub_unregister_memory_impl(uint8_t *ub_ctx);
+int32_t umq_ub_register_memory_impl(void *buf, uint64_t size);
+void umq_ub_unregister_memory_impl(void);
 
 int umq_ub_log_config_set_impl(umq_log_config_t *config);
 int umq_ub_log_config_reset_impl(void);
@@ -134,5 +134,7 @@ void ubmm_fill_big_data_ref_sge(uint64_t umqh_tp, ub_ref_sge_t *ref_sge,
 int umq_ub_async_event_fd_get(umq_trans_info_t *trans_info);
 int umq_ub_async_event_get(umq_trans_info_t *trans_info, umq_async_event_t *event);
 void umq_ub_async_event_ack(umq_async_event_t *event);
+int umq_ub_dev_add_impl(umq_trans_info_t *info, umq_init_cfg_t *cfg);
+int umq_ub_get_route_list_impl(const umq_route_t *route, umq_route_list_t *route_list);
 
 #endif

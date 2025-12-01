@@ -89,6 +89,7 @@ typedef enum umq_dev_assign_mode {
 #define UMQ_IPV6_SIZE                (46)
 #define UMQ_DEV_NAME_SIZE            (64)
 #define UMQ_BATCH_SIZE               (64)
+#define UMQ_MAX_BUF_REQUEST_SIZE     (10485760) // 10M
 
 #define UMQ_INTERRUPT_FLAG_IO_DIRECTION         (1)         // enable arg direction
 
@@ -124,6 +125,7 @@ typedef struct umq_dev_assign {
         } eid;
         struct {
             char dev_name[UMQ_DEV_NAME_SIZE];
+            uint32_t eid_idx;
         } dev;
     };
 } umq_dev_assign_t;
@@ -162,6 +164,8 @@ typedef struct umq_flow_control_cfg {
 
 typedef enum umq_buf_block_size {
     BLOCK_SIZE_8K,
+    BLOCK_SIZE_16K,
+    BLOCK_SIZE_32K,
     BLOCK_SIZE_64K,
 
     BLOCK_SIZE_MAX,
@@ -181,7 +185,6 @@ typedef struct umq_init_cfg {
     uint8_t trans_info_num;
     umq_flow_control_cfg_t flow_control; // used when UMQ_FEATURE_ENABLE_FLOW_CONTROL is set
     umq_buf_block_cfg_t block_cfg;
-    uint16_t eid_idx;
     uint16_t cna;
     uint32_t ubmm_eid;
     umq_trans_info_t trans_info[MAX_UMQ_TRANS_INFO_NUM];
@@ -452,6 +455,8 @@ typedef enum umq_async_event_type {
     UMQ_EVENT_OTHER,
 } umq_async_event_type_t;
 
+#define UMQ_MAX_ROUTES 16
+
 typedef struct umq_async_event {
     umq_trans_info_t trans_info;
     union {
@@ -462,6 +467,27 @@ typedef struct umq_async_event {
     int original_code; // record original event
     void *priv;
 } umq_async_event_t;
+
+typedef union umq_route_flag {
+    struct {
+        uint32_t rtp: 1;
+        uint32_t ctp: 1;
+        uint32_t utp: 1;
+        uint32_t reserved: 29;
+    } bs;
+    uint32_t value;
+} umq_route_flag_t;
+
+typedef struct umq_route {
+    umq_eid_t src;
+    umq_eid_t dst;
+    umq_route_flag_t flag;
+} umq_route_t;
+
+typedef struct umq_route_list {
+    uint32_t len;
+    umq_route_t buf[UMQ_MAX_ROUTES];
+} umq_route_list_t;
 
 #ifdef __cplusplus
 }

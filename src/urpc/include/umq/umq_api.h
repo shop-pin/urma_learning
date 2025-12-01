@@ -90,8 +90,8 @@ umq_state_t umq_state_get(uint64_t umqh);
 /**
  * User should ensure thread safety if io_lock_free is true
  * Alloc umq buf, qbuf list with qbuf_next.
- * @param[in] request_size: size of qbuf request to alloc
- * @param[in] request_qbuf_num: num of qbuf request to alloc
+ * @param[in] request_size: size of qbuf request to alloc, [0, UMQ_MAX_BUF_REQUEST_SIZE]
+ * @param[in] request_qbuf_num: num of qbuf request to alloc, (0, UMQ_BATCH_SIZE]
  * @param[in] umqh: umq handle, use for mode ipc/ubmm
  * @param[in] option: alloc option param
  * (1) mode ipc/ubmm, each queue has a small shared memory pool. When using shared memory via ipc or ubmm,
@@ -108,6 +108,14 @@ umq_buf_t *umq_buf_alloc(uint32_t request_size, uint32_t request_qbuf_num, uint6
  * @param[in] qbuf: buf for enqueue/dequeue
  */
 void umq_buf_free(umq_buf_t *qbuf);
+
+/**
+ * User should ensure thread safety if io_lock_free is true
+ * Break and free the qbufs of first batch
+ * @param[in] qbuf: list of qbuf
+ * Return first qbuf addr of next batch, return NULL if not exist
+ */
+umq_buf_t *umq_buf_break_and_free(umq_buf_t *qbuf);
 
 /**
  * User should ensure thread safety if io_lock_free is true
@@ -243,6 +251,22 @@ int umq_log_config_set(umq_log_config_t *config);
  * -UMQ_ERR_EINVAL: Invalid parameter
  */
 int umq_log_config_get(umq_log_config_t *config);
+
+/**
+ * add dev for umq, only support ub
+ * @param[in] trans_info: transport info;
+ * Return: 0 on success, other value on error
+ */
+int umq_dev_add(umq_trans_info_t *trans_info);
+
+/**
+ * Get primary and port eid from topo info.
+ * @param[in] route: parameter that contains src_v_eid and dst_v_eid, refers to umq_route_t;
+ * @param[in] umq_trans_mode: umq trans mdoe;
+ * @param[out] route_list: a list buffer, containing all routes returned;
+ * Return: 0 on success, other value on error
+ */
+int umq_get_route_list(const umq_route_t *route, umq_trans_mode_t umq_trans_mode, umq_route_list_t *route_list);
 
 #ifdef __cplusplus
 }

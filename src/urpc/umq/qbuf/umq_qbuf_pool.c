@@ -109,6 +109,10 @@ int umq_buf_size_pow_small_set(umq_buf_block_size_t block_size)
 
     if (block_size == BLOCK_SIZE_8K) {
         g_umq_qbuf_size_pow_samll = UMQ_QBUF_SIZE_POW_8K;
+    } else if (block_size == BLOCK_SIZE_16K) {
+        g_umq_qbuf_size_pow_samll = UMQ_QBUF_SIZE_POW_16K;
+    } else if (block_size == BLOCK_SIZE_32K) {
+        g_umq_qbuf_size_pow_samll = UMQ_QBUF_SIZE_POW_32K;
     } else {
         g_umq_qbuf_size_pow_samll = UMQ_QBUF_SIZE_POW_64K;
     }
@@ -394,4 +398,14 @@ uint32_t umq_qbuf_headroom_get(void)
 umq_buf_mode_t umq_qbuf_mode_get(void)
 {
     return g_qbuf_pool.mode;
+}
+
+int umq_qbuf_register_seg(uint8_t *ctx, register_seg_callback_t register_seg_func)
+{
+    return register_seg_func(ctx, UMQ_QBUF_DEFAULT_MEMPOOL_ID, g_qbuf_pool.data_buffer,  g_qbuf_pool.total_size);
+}
+
+int umq_qbuf_unregister_seg(uint8_t *ctx, unregister_seg_callback_t unregister_seg_func)
+{
+    return unregister_seg_func(ctx, UMQ_QBUF_DEFAULT_MEMPOOL_ID);
 }

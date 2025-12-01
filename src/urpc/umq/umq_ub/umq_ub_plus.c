@@ -22,7 +22,7 @@ static uint8_t *umq_tp_ub_plus_init(umq_init_cfg_t *cfg)
         return NULL;
     }
 
-    if (umq_ub_register_memory_impl(ub_ctx, umq_io_buf_addr(), umq_io_buf_size()) != UMQ_SUCCESS) {
+    if (umq_ub_register_memory_impl(umq_io_buf_addr(), umq_io_buf_size()) != UMQ_SUCCESS) {
         UMQ_VLOG_ERR("register memory failed\n");
         goto UNINIT;
     }
@@ -35,7 +35,7 @@ static uint8_t *umq_tp_ub_plus_init(umq_init_cfg_t *cfg)
     return ub_ctx;
 
 UNINIT_MEM:
-    umq_ub_unregister_memory_impl(ub_ctx);
+    umq_ub_unregister_memory_impl();
 
 UNINIT:
     umq_ub_ctx_uninit_impl(ub_ctx);
@@ -49,7 +49,7 @@ static void umq_tp_ub_plus_uninit(uint8_t *ctx)
         return;
     }
     umq_ub_huge_qbuf_pool_uninit();
-    umq_ub_unregister_memory_impl(ctx);
+    umq_ub_unregister_memory_impl();
     umq_ub_ctx_uninit_impl(ctx);
 }
 
@@ -149,6 +149,11 @@ static void umq_tp_ub_plus_async_event_ack(umq_async_event_t *event)
     return umq_ub_async_event_ack(event);
 }
 
+int umq_tp_ub_plus_dev_add_impl(umq_trans_info_t *trans_info, umq_init_cfg_t *cfg)
+{
+    return umq_ub_dev_add_impl(trans_info, cfg);
+}
+
 static umq_ops_t g_umq_ub_plus_ops = {
     .mode = UMQ_TRANS_MODE_UB_PLUS,
     // control plane api
@@ -162,6 +167,7 @@ static umq_ops_t g_umq_ub_plus_ops = {
     .umq_tp_state_get = umq_tp_ub_plus_state_get,
     .umq_tp_log_config_set = umq_tp_ub_plus_log_config_set,
     .umq_tp_log_config_reset = umq_tp_ub_plus_log_config_reset,
+    .umq_tp_dev_add = umq_tp_ub_plus_dev_add_impl,
 
     // datapath plane api
     .umq_tp_buf_alloc = umq_tp_ub_plus_buf_alloc,
