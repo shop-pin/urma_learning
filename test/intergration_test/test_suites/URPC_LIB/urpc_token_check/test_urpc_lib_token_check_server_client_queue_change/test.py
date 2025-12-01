@@ -1,30 +1,26 @@
 """
  * SPDX-License-Identifier: MT
  * Copyright (c) Huawei Technologies Co., Ltd. 2024-2024. All rights reserved.
- * Description: umq example
+ * Description: urpclib example
 """
 
 """
-UMQ demo (数据面pro接口 + 消息是裸数据)
-测试覆盖不开 UMQ_FEATURE_ENABLE_TOKEN_POLICY 、开UMQ_FEATURE_ENABLE_TOKEN_POLICY 2种情况
 
 :Preparation
-2HOST部署UMDK
+
 
 :TestStep
-1、umq初始化，创建queue，bind建链
-2、使用数据面pro接口，发送消息（裸数据）
+
 
 :ExpectOutput
-1、初始化超过，创建queue成功，bind建链成功
-2、发送成功，对端解析成功
+
 """
 
 import logging
 import os
 import sys
 
-from app.umq.umq_app import prepare_test_case, exec_test_case
+from app.umq.umq_app import prepare_test_case_urpc_lib, exec_test_case
 
 local_path = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.pathdirname(local_path))
@@ -38,12 +34,12 @@ clas Test(UBUSFeature):
     def setup(self):
         super(Test, self),setup()
         log_info('---------- [ Test setup ] ----------')
-        prepare_test_Case(self.host_list, local_path)
+        prepare_test_case_urpc_lib(self.host_list, local_path)
 
     def teardown(self):
         log_info('---------- [ Test teardown ] ----------')
         super(Test, self).teardown()
 
-    def test_umq_demo_pro(self):
+    def test_urpc_lib_timeout_normal(self):
         log_info(f'---------- [ Test local_path = {local_path} ] ----------')
-        exec_test_case(self.host_list, local_path, rand_host=False, mode=["UB_PLUS"])
+        exec_test_case(self.host_list, local_path, rand_host=False)

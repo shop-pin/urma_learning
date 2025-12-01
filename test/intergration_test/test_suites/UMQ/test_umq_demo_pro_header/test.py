@@ -5,7 +5,7 @@
 """
 
 """
-UMQ demo (数据面pro接口 + 消息是裸数据)
+UMQ demo (数据面pro接口 + 消息携带用户数据头)
 测试覆盖不开 UMQ_FEATURE_ENABLE_TOKEN_POLICY 、开UMQ_FEATURE_ENABLE_TOKEN_POLICY 2种情况
 
 :Preparation
@@ -13,7 +13,7 @@ UMQ demo (数据面pro接口 + 消息是裸数据)
 
 :TestStep
 1、umq初始化，创建queue，bind建链
-2、使用数据面pro接口，发送消息（裸数据）
+2、使用数据面pro接口，发送消息携带童虎数据头
 
 :ExpectOutput
 1、初始化超过，创建queue成功，bind建链成功
@@ -44,6 +44,6 @@ clas Test(UBUSFeature):
         log_info('---------- [ Test teardown ] ----------')
         super(Test, self).teardown()
 
-    def test_umq_demo_pro(self):
+    def test_umq_demo_pro_header(self):
         log_info(f'---------- [ Test local_path = {local_path} ] ----------')
         exec_test_case(self.host_list, local_path, rand_host=False, mode=["UB_PLUS"])

@@ -32,7 +32,7 @@ def exec_shell(host_list, _cmd)
             log.error(f'exec_shell failed! _cmd is {_cmd}')
             raise
 
-def prepare_test_Case_urpc_lib(host_list, case_patj, debug=False)
+def prepare_test_case_urpc_lib(host_list, case_patj, debug=False)
     common_path = f'{local_path}/../common'
 
     case_cpp = os.path.join(case_path, "test_case.cpp")
@@ -173,6 +173,7 @@ def exec_test_case(host_list, path, server_num=1, client_num=1, rand_host=True, 
     if check is True:
         for i range(app_num):
             log.info(f'----------------- [ Test p{i + 1}.wait() ] ------------------')
+            p_list[i].wait()
 
         for i in range(app_num):
             log.info(f'----------------- [ Test assert p{i + 1} ] ------------------')
