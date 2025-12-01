@@ -11,7 +11,7 @@ import platform
 import time
 import datetime
 
-fromn comon.constants import const
+from common.constants import const
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger()
@@ -21,7 +21,7 @@ local_path = os.path.dirname(os.path.abspath(__file__))
 URPC_TRANS_MODE_UB = 1
 
 
-def exec_shell(host_list, _cmd)
+def exec_shell(host_list, _cmd):
     p_list = []
     for host in host_list:
         p_list.append(host.exec_cmd(_cmd, background=True))
@@ -32,7 +32,7 @@ def exec_shell(host_list, _cmd)
             log.error(f'exec_shell failed! _cmd is {_cmd}')
             raise
 
-def prepare_test_case_urpc_lib(host_list, case_patj, debug=False)
+def prepare_test_case_urpc_lib(host_list, case_path, debug=False)
     common_path = f'{local_path}/../common'
 
     case_cpp = os.path.join(case_path, "test_case.cpp")
@@ -44,11 +44,11 @@ def prepare_test_case_urpc_lib(host_list, case_patj, debug=False)
     _cmd = f'cd {local_path};' \
         f'g++ ../common/common.c ../common/test_log.c ../common/test_thread_pool.c ../common/ub_get_clock.c ' \
         f'urpc_lib_atom.cpp {case_cpp}'
-    if os.path.exists(public_cpp)
+    if os.path.exists(public_cpp):
         _cmd += f"{public_cpp} "
     _cmd += f"{afi_cmd} - o {case_out} "
 
-    lib_list = ['-lglib-2.0', '-lpthrad', '-lboundscheck', '-lurpc_framework', f'-I {local_path}', f'-I {case_path}/../',
+    lib_list = ['-lglib-2.0', '-lpthread', '-lboundscheck', '-lurpc_framework', f'-I {local_path}', f'-I {case_path}/../',
     f'-I {const.GCC_INCLUDE_PATH_URPC}']
 
     _cmd += " ".join(lib_list)
@@ -64,20 +64,20 @@ def prepare_test_case_urpc_lib(host_list, case_patj, debug=False)
     for p in p_list:
         p.wait()
         if p.ret != 0:
-            log.error("gcc test_Case failed!")
+            log.error("gcc test_case failed!")
             raise
 
-def gen_randon_port(host_list, port_num=2):
+def gen_random_port(host_list, port_num=2):
     tcp_port = 20000
     test_port = 30000
     used_ports = set()
     for host in host_list:
-        _cmd = "netstat -ant|grep '^tcp'|awk '{print $4}'|awk -F':' '{PRINT $NF}'|sort | uniq"
-        for port in hosrt.exec_cmd(_cmd, silence=True).stdout.split("\r\n"):
+        _cmd = "netstat -ant|grep '^tcp'|awk '{print $4}'|awk -F':' '{print $NF}'|sort | uniq"
+        for port in host.exec_cmd(_cmd, silence=True).stdout.split("\r\n"):
             if port.isdigit():
                 used_ports.add(int(port))
-    for i in range(100);
-    tcp_port = random.ranint(20000, 30000)
+    for i in range(100):
+    tcp_port = random.randint(20000, 30000)
     test_port = tcp_port + 10000
     if tcp_port not in used_ports and test_port not in used_ports:
         break
@@ -95,7 +95,7 @@ def get_test_dev(case_name, test_host, host_idx):
 
     return test_dev, test_dev2
 
-def get_test_eid(case_name, test_host, hoip_addrsst_idx):
+def get_test_eid(case_name, test_host, host_idx):
     test_eid = ""
     if case_name.startswith("test_urpclib") and hasattr(test_host[0], "test_nic2"):
         test_eid = test_host[host_idx].test_nic2_eid
@@ -104,18 +104,18 @@ def get_test_eid(case_name, test_host, hoip_addrsst_idx):
     return test_eid
 
 def get_ip_addrs_cmd(ip_addrs):
-    if ip_adddrs:
-        ip_num = len(ip_adddrs.split(","))
-        cmd = f' --ip_num {ip_num} --ip_addrs {ip_adddrs}'
+    if ip_addrs:
+        ip_num = len(ip_addrs.split(","))
+        cmd = f' --ip_num {ip_num} --ip_addrs {ip_addrs}'
 
 def exec_test_case(host_list, path, server_num=1, client_num=1, rand_host=True, **kwargs):
     log.info(f'------------- [ Test path = {path} ] ------------')
-    tcp_port, _test_port = gen_randon_port(host_list)
+    tcp_port, _test_port = gen_random_port(host_list)
     seed = random.ranint(0, 10000)
     app_num = server_num + client_num
     check = kwargs.get("check", True)
     debug = kwargs.get("debug", False)
-    ip_version = kwargs.get("ip_version", False)
+    ip_version = kwargs.get("ip_version", None)
     case_path = kwargs.get("case_path", "''")
     _case_name = path.split('/')[-1]
     timeout = kwargs.get("timeout", 1800)
@@ -151,7 +151,7 @@ def exec_test_case(host_list, path, server_num=1, client_num=1, rand_host=True, 
 
 
     for i in range(1, server_num):
-        log.info(f'-------------------- strat app{i} server ---------------------')
+        log.info(f'-------------------- start app{i} server ---------------------')
         _appid = i + 1
         test_dev, test_dev2 = get_test_dev(_case_name, test_host, i)
         test_eid = get_test_eid(_case_name, test_host, i)
@@ -161,7 +161,7 @@ def exec_test_case(host_list, path, server_num=1, client_num=1, rand_host=True, 
         p_list.append(test_host[i].exec_cmd(_cmd, background=True, timeout=timeout, port=test_port))
 
     for i in range(server_num, app_num):
-        log.info(f'-------------------- strat app{i} client ---------------------')
+        log.info(f'-------------------- start app{i} client ---------------------')
         _appid = i + 1
         test_dev, test_dev2 = get_test_dev(_case_name, test_host, i)
         test_eid = get_test_eid(_case_name, test_host, i)
@@ -171,7 +171,7 @@ def exec_test_case(host_list, path, server_num=1, client_num=1, rand_host=True, 
         p_list.append(test_host[i].exec_cmd(_cmd, background=True, timeout=timeout, port=test_port))
 
     if check is True:
-        for i range(app_num):
+        for i in range(app_num):
             log.info(f'----------------- [ Test p{i + 1}.wait() ] ------------------')
             p_list[i].wait()
 
