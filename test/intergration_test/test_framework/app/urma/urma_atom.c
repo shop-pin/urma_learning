@@ -226,7 +226,7 @@ void test_set_default_ctx_jetty(test_urma_ctx_t *ctx)
         return;
     }
     uint32_t seed = get_random_u32(&ctx->test_ctx->seed);
-    
+
     for (int i = 0; i < ctx->l_ctx.num_jetty; i++) {
         ctx->l_ctx.jetty_cfg[i].flag.value = 0;
         ctx->l_ctx.jetty_cfg[i].jfs_cfg.depth = TEST_JETTY_DEPTH;
@@ -601,8 +601,8 @@ urma_jetty_t *test_create_jetty(test_urma_ctx_t *ctx, test_jetty_cfg_t test_jett
     if (jetty == NULL) {
         TEST_LOG_ERROR("Failed to urma_create_jetty\n");
     } else {
-        TEST_LOG_DEBUG("urma_create_jetty eid=0x%x uasid=%u id=%u\n", jetty->jetty.eid.in4.addr, 
-                        jetty->jetty_id.uasid, jetty->jetty_id.id);
+        TEST_LOG_DEBUG("urma_create_jetty eid=0x%x uasid=%u id=%u\n", jetty->jetty_id.eid.in4.addr,
+                       jetty->jetty_id.uasid, jetty->jetty_id.id);
     }
     return jetty;
 }
@@ -887,7 +887,7 @@ void test_ctx_import_seg(test_urma_ctx_t *ctx, int r_ctx_id, int r_seg_id)
         return;
     }
 
-    ctx->r_ctx[r_ctx_id].tseg[r_seg_id] = 
+    ctx->r_ctx[r_ctx_id].tseg[r_seg_id] =
         urma_import_seg(ctx->urma_ctx, &ctx->r_ctx[r_ctx_id].seg[r_seg_id], &ctx->token_value, 0, flag);
     TEST_LOG_DEBUG("urma_import_seg app[%d].seg[%d] tseg=%p\n", r_ctx_id, r_seg_id,
                    ctx->r_ctx[r_ctx_id].tseg[r_seg_id]);
@@ -957,7 +957,7 @@ void test_unimport_resource(test_urma_ctx_t *ctx)
 
         for (int i = 0; i < ctx->r_ctx[app].num_jetty; i++) {
             test_ctx_unimport_jetty(ctx, app, i);
-        } 
+        }
         for (int i = 0; i < ctx->r_ctx[app].num_jfr; i++) {
             test_ctx_unimport_jfr(ctx, app, i);
         }
