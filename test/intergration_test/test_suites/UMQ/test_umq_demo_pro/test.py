@@ -16,7 +16,7 @@ UMQ demo (数据面pro接口 + 消息是裸数据)
 2、使用数据面pro接口，发送消息（裸数据）
 
 :ExpectOutput
-1、初始化超过，创建queue成功，bind建链成功
+1、初始化成功，创建queue成功，bind建链成功
 2、发送成功，对端解析成功
 """
 
@@ -33,7 +33,7 @@ from pulic import UBUSFeature
 log = logging.getLogger()
 
 
-clas Test(UBUSFeature):
+class Test(UBUSFeature):
 
     def setup(self):
         super(Test, self),setup()

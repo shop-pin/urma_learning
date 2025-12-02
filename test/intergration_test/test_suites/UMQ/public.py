@@ -5,7 +5,6 @@
 """
 
 import logging
-import os
 
 from ubus_test.base_test import BaseTest
 

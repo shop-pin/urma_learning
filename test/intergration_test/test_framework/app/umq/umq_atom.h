@@ -24,6 +24,7 @@
 
 #include "umq_api.h"
 #include "umq_pro_api.h"
+#include "umq_errno.h"
 
 #define UMQ_IPV4_MAP_IPV6_PREFIX (0x0000ffff)
 #define UMQ_EID_STR_MIN_LEN 3
@@ -39,17 +40,18 @@
 #define UMQ_DEFAULT_RX_BUF_SIZE (4096)
 #define UMQ_QBUF_BLOCK_SIZE (8192)
 #define UMQ_MAX_WR_COUNT (64)
+#define TEST_UMQ_MAX_BIND_INFO_SIZE (512)
 
-#define DEQUEUE_SLEEP_TIME_US (30000)
-#define DEQUEUE_TIMEOUT_MS (3000)
+#define DEQUEUE_SLEEP_TIME_US (100)
+#define DEQUEUE_TIMEOUT_MS (30000)
 #define DEFAULT_WAIT_TIME_MS (3000)
 #define DEFAULT_FLUSH_TIME_MS (1000)
-
+#define STATUS_SLEEP_TIME_US (10000)
 #define TEST_MAX_POLL_BATCH (64)
 #define TEST_IMM_DATA (123456)
 
-#define ASYNC_FLAG_DISABLE 0
-#define ASYNC_FLAG_ENABLE 1
+#define CQ_EVENT_FLAG_DISABLE 0
+#define CQ_EVENT_FLAG_ENABLE 1
 
 typedef enum {
     TEST_TRANS_MODE_IP = 0,
@@ -78,8 +80,10 @@ typedef struct {
     uint32_t r_qidx;
     uint32_t l_binfo_len;
     uint32_t r_binfo_len;
-    uint8_t l_binfo[UMQ_MAX_BIND_INFO_SIZE];
-    uint8_t r_binfo[UMQ_MAX_BIND_INFO_SIZE];
+    uint8_t l_binfo[TEST_UMQ_MAX_BIND_INFO_SIZE];
+    uint8_t r_binfo[TEST_UMQ_MAX_BIND_INFO_SIZE];
+    bool not_check_data;
+    umq_opcode_t opcode;
 } umqh_ops_t;
 
 typedef struct {
@@ -88,7 +92,7 @@ typedef struct {
     uint32_t l_qidx;
     uint32_t r_qidx;
     uint32_t bind_info_len;
-    uint8_t bind_info[UMQ_MAX_BIND_INFO_SIZE];
+    uint8_t bind_info[TEST_UMQ_MAX_BIND_INFO_SIZE];
 } exchange_bind_info_t;
 
 typedef struct {
@@ -134,6 +138,7 @@ typedef struct {
     char *data;
     umqh_ops_t *umqh_ops;
     bool is_not_poll;
+    uint32_t *seed;
 } test_data_args_t;
 
 extern test_umq_ctx_t g_test_umq_ctx;
@@ -141,6 +146,31 @@ extern const char *ENQUEUE_DATA_DEFAUT;
 extern size_t enqueue_data_len;
 extern const char * POST_DATA_DEFAUT;
 extern size_t post_data_len;
+
+#define NS_PER_SEC 1000000000UL
+#define MS_PER_SEC 1000
+#define NS_PER_MS 1000000
+
+static inline uint64_t get_timestamp_ns(void)
+{
+    struct timespec tc;
+    (void)clock_gettime(CLOCK_MONOTONIC, &tc);
+    return (uint64_t)(tc.tv_sec * NS_PER_SEC + tc.tv_nsec);
+}
+
+static inline uint64_t get_timestamp_ms(void)
+{
+    struct timespec tc;
+    (void)clock_gettime(CLOCK_MONOTONIC, &tc);
+    return (uint64_t)tc.tv_sec * MS_PER_SEC + tc.tv_nsec / NS_PER_MS;
+}
+
+static inline uint64_t get_timestamp_s(void)
+{
+    struct timespec tc;
+    (void)clock_gettime(CLOCK_MONOTONIC, &tc);
+    return tc.tv_sec;
+}
 
 int test_umq_str_to_eid(const char *buf, umq_eid_t *eid);
 void test_get_ubmm_cna(test_umq_ctx_t *ctx);
@@ -166,7 +196,7 @@ int test_umq_undo_prepare(test_umq_ctx_t *ctx);
 
 uint64_t get_buf_alloc_umqh(umqh_ops_t *umqh_ops, uint32_t data_size);
 umq_buf_t *test_umq_buf_alloc(umqh_ops_t *umqh_ops, umq_alloc_option_t *option, const char *data, uint32_t data_size);
-int test_umq_buf_fill(umqh_ops_t umqh_ops, umq_buf_t *buf, const char *data, uint32_t data_size);
+int test_umq_buf_fill(umqh_ops_t *umqh_ops, umq_buf_t *buf, const char *data, uint32_t data_size);
 int test_umq_buf_parse(umq_buf_t *buf, const char *data, uint32_t data_size);
 int test_umq_rearm_interrupt(umqh_ops_t *umqh_ops, umq_io_direction_t direction, bool solicated = false);
 int test_umq_wait_interrupt(umqh_ops_t *umqh_ops, umq_io_direction_t direction, int timeout = DEFAULT_WAIT_TIME_MS);
@@ -174,12 +204,12 @@ int test_umq_get_cq_event(umqh_ops_t *umqh_ops, umq_io_direction_t direction, in
 void test_umq_ack_interrupt(umqh_ops_t *umqh_ops, umq_io_direction_t direction, uint32_t nevents);
 void test_data_args_fill(test_data_args_t *data_args);
 
-int test_umq_post_rx_buf(umqh_ops_t *umqh_ops, uint32_t depth = 0)
-int test_umq_post_rx(test_umq_ctx_t *ctx, uint32_t depth = 0);
-int test_umq_post_tx_buf(umqh_ops_t *umqh_ops, const char *data = POST_DATA_DEFAUT, uint32_t data_size = post_data_len);
-int test_ump_poll(uint64_t umqh, umq_io_direction_t direction, umq_buf_t **buf, uint32_t buf_count = TEST_MAX_POLL_BATCH, uint64_t timeout  = DEQUEUE_TIMEOUT_MS);
-int test_umq_poll_tx_buf(umqh_ops_t *umqh_ops, uint64_t timeout = DEQUEUE_TIMEOUT_MS);
-int test_umq_poll_rx_buf(umqh_ops_t *umqh_ops, const char *data = POST_DATA_DEFAUT, uint32_t data_size = post_data_len, uint64_t timeout = DEQUEUE_TIMEOUT_MS);
+int test_umq_post_rx_buf(umqh_ops_t *umqh_ops, uint32_t depth = 0, uint32_t size = 0, uint64_t *status = NULL);
+int test_umq_post_rx(test_umq_ctx_t *ctx, uint32_t depth = 0, umqh_ops_t *umqh_ops = nullptr, uint64_t *status = NULL);
+int test_umq_post_tx_buf(umqh_ops_t *umqh_ops, const char *data = POST_DATA_DEFAUT, uint32_t data_size = post_data_len, uint64_t *status = NULL);
+int test_umq_poll(uint64_t umqh, umq_io_direction_t direction, umq_buf_t **buf, uint32_t buf_count = TEST_MAX_POLL_BATCH, uint64_t timeout  = DEQUEUE_TIMEOUT_MS);
+int test_umq_poll_tx_buf(umqh_ops_t *umqh_ops, uint64_t timeout = DEQUEUE_TIMEOUT_MS, uint64_t *status = NULL);
+int test_umq_poll_rx_buf(umqh_ops_t *umqh_ops, const char *data = POST_DATA_DEFAUT, uint32_t data_size = post_data_len, uint64_t timeout = DEQUEUE_TIMEOUT_MS, uint64_t *status = NULL);
 void test_umq_flush(umqh_ops_t *umqh_ops, umq_io_direction_t direction = UMQ_IO_ALL, uint64_t timeout = DEFAULT_FLUSH_TIME_MS);
 int test_umq_pro_func_req(test_data_args_t *data_args);
 int test_umq_pro_func_rsp(test_data_args_t *data_args);

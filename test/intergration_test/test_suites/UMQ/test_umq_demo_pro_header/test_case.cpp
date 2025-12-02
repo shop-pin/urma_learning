@@ -6,8 +6,8 @@
 
  #include "umq_atom.h"
 
- static int run_test(test_umq_ctx_t *ctx)
- {
+static int run_test(test_umq_ctx_t *ctx)
+{
     int rc = TEST_FAILED, ret;
 
     for (int i = 0; i < 2; i ++) {
@@ -20,20 +20,20 @@
             default:
                 break;
         }
-        ctx->cfg.headroom_size = TEST_DATA_HEADER_SIZE
+        ctx->cfg.headroom_size = TEST_DATA_HEADER_SIZE;
         test_data_args_t data_args = {};
 
         ret = test_umq_prepare(ctx);
         CHKERR_JUMP(ret != TEST_SUCCESS, "test_umq_prepare", EXIT);
         sync_time("------------------------------1");
         if (ctx->app_id == PROC_2) {
-            data_args.umqh_ops = &ctx->umqh_op[0]
-            ret = test_umq_pro_func_req(data_args);
+            data_args.umqh_ops = &ctx->umqh_ops[0];
+            ret = test_umq_pro_func_req(&data_args);
             CHKERR_JUMP(ret != TEST_SUCCESS, "test_umq_pro_func_req", EXIT);
         }
         sync_time("------------------------------2");
         if (ctx->app_id == PROC_1) {
-            data_args.umqh_ops = &ctx->umqh_op[0]
+            data_args.umqh_ops = &ctx->umqh_ops[0];
             ret = test_umq_pro_func_rsp(&data_args);
             CHKERR_JUMP(ret != TEST_SUCCESS, "test_umq_pro_func_rsp", EXIT);
         }
@@ -45,9 +45,9 @@
 EXIT:
     sync_time("------------------------------4");
     return rc;
- }
+}
 
- int main(int argc, char *argv[])
+int main(int argc, char *argv[])
 {
     int ret;
     test_umq_ctx_t *ctx = test_umq_ctx_init(argc, argv);

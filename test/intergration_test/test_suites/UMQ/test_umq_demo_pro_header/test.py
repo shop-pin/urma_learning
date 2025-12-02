@@ -13,10 +13,10 @@ UMQ demo (数据面pro接口 + 消息携带用户数据头)
 
 :TestStep
 1、umq初始化，创建queue，bind建链
-2、使用数据面pro接口，发送消息携带童虎数据头
+2、使用数据面pro接口，发送消息携带用户数据头
 
 :ExpectOutput
-1、初始化超过，创建queue成功，bind建链成功
+1、初始化成功，创建queue成功，bind建链成功
 2、发送成功，对端解析成功
 """
 
@@ -28,12 +28,12 @@ from app.umq.umq_app import prepare_test_case, exec_test_case
 
 local_path = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.pathdirname(local_path))
-from pulic import UBUSFeature
+from public import UBUSFeature
 
 log = logging.getLogger()
 
 
-clas Test(UBUSFeature):
+class Test(UBUSFeature):
 
     def setup(self):
         super(Test, self),setup()

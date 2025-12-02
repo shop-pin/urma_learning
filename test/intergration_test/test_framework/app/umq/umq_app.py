@@ -16,7 +16,7 @@ import datetime
 from common.constants import const
 
 logging.basicConfig(level=logging.INFO)
-log = logging.getLogger
+log = logging.getLogger()
 local_path = os.path.dirname(os.path.abspath(__file__))
 
 
@@ -27,13 +27,13 @@ UMQ_TRANS_MODE_IPC = 3
 UMQ_TRANS_MODE_UB_PLUS = 5
 UMQ_TRANS_MODE_UBMM_PLUS = 7
 
-def prepare_test_case(host_list, case_path)
+def prepare_test_case(host_list, case_path):
     case_cpp = os.path.join(case_path, "test_case.cpp")
     public_cpp = os.path.join(case_path, "../public.cpp")
     case_out = os.path.join(case_path, "test_case")
     case_log = os.path.join(case_path, "*.log")
     _cmd = f'cd {local_path};' \
-        f'g++ ../common/common.c ../common/test_log.c ../common/test_thread_pool.c ../common/ub_get_clock.c ' \
+        f'g++ ../common/common.c ../common/test_log.c ../common/test_thread_pool.c ' \
         f'umq_atom.cpp {case_cpp} -g -O0 - o {case_out} '
     if os.path.exists(public_cpp):
         _cmd += f"{public_cpp} "
@@ -65,41 +65,41 @@ def gen_random_port(host_list, port_num=2):
             if port.isdigit():
                 used_ports.add(int(port))
     for i in range(100):
-    tcp_port = random.ranint(20000, 30000)
-    test_port = tcp_port + 10000
-    if tcp_port not in used_ports and test_port not in used_ports:
-        break
+        tcp_port = random.randint(20000, 30000)
+        test_port = tcp_port + 10000
+        if tcp_port not in used_ports and test_port not in used_ports:
+            break
     return tcp_port, test_port
 
     
-    def get_trans_mode(mode):
-        trans_mode = UMQ_TRANS_MODE_IP
-        if mode == 'UB':
-            trans_mode = UMQ_TRANS_MODE_UB
-        if mode == 'IB':
-            trans_mode = UMQ_TRANS_MODE_IB
-        if mode == 'UB_PLUS':
-            trans_mode = UMQ_TRANS_MODE_UB_PLUS
-        if mode == 'UBMM_PLUS':
-            trans_mode = UMQ_TRANS_MODE_UBMM_PLUS
-        if mode == 'UB_IPC':
-            trans_mode = UMQ_TRANS_MODE_IPC
-        return trans_mode
+def get_trans_mode(mode):
+    trans_mode = UMQ_TRANS_MODE_IP
+    if mode == 'UB':
+        trans_mode = UMQ_TRANS_MODE_UB
+    if mode == 'IB':
+        trans_mode = UMQ_TRANS_MODE_IB
+    if mode == 'UB_PLUS':
+        trans_mode = UMQ_TRANS_MODE_UB_PLUS
+    if mode == 'UBMM_PLUS':
+        trans_mode = UMQ_TRANS_MODE_UBMM_PLUS
+    if mode == 'UB_IPC':
+        trans_mode = UMQ_TRANS_MODE_IPC
+    return trans_mode
 
 
 def get_test_dev(case_name, mode, test_host, host_idx):
     test_dev2 = None
 
     if hasattr(test_host[0], "test_nic2"):
-        test_dev = test_host[host_idx].test_nic2 if mode == 'IB' or mode == 'UB' esle test_host[host_idx].test_nic2_dev
+        test_dev = test_host[host_idx].test_nic2 if mode == 'IB' or mode == 'UB' else test_host[host_idx].test_nic2_dev
     else:
-        test_dev = test_host[host_idx].test_nic1 if mode == 'IB' or mode == 'UB' esle test_host[host_idx].test_nic1_dev
-        test_dev2 = test_host[host_idx].test_nic1_dev if mode == 'IB' or mode == 'UB' esle test_host[host_idx].test_nic1
+        test_dev = test_host[host_idx].test_nic1 if mode == 'IB' or mode == 'UB' else test_host[host_idx].test_nic1_dev
+        test_dev2 = test_host[host_idx].test_nic1_dev if mode == 'IB' or mode == 'UB' else test_host[host_idx].test_nic1
     return test_dev, test_dev2
 
 
 def get_test_eid(case_name, mode, test_host, host_idx):
-    test_eid = "
+    test_eid = ""
     if hasattr(test_host[0], "test_nic2"):
         test_eid = test_host[host_idx].test_nic2_eid
     else:
@@ -152,7 +152,7 @@ def exec_test_case(host_list, path, server_num=1, client_num=1, rand_host=True, 
             for i in range(server_num):
                 test_host.append(host_list[0])
             for i in range(server_num, app_num):
-                if 'IPC' in get_trans_mode:
+                if 'IPC' in _mode:
                     test_host.append(host_list[0])
                 else:
                     test_host.append(host_list[1])
@@ -176,7 +176,7 @@ def exec_test_case(host_list, path, server_num=1, client_num=1, rand_host=True, 
             test_dev, test_dev2 = get_test_dev(_case_name, dev_type, test_host, i)
             test_eid = get_test_eid(_case_name, dev_type, test_host, i)
             _cmd = f'{path}/test_case -a {app_num}:{i + 1}:{tcp_port}:{test_host[0].manage_ip}' \
-                f'-d {test_dev} -D {test_dev2}' -e {test_eid} -p {test_port + i} -s {seed} {_test_ip}' \
+                f'-d {test_dev} -D {test_dev2} -e {test_eid} -p {test_port + i} -s {seed} {_test_ip}' \
                 f'-x {case_path} -m {trans_mode}{ip_addrs_cmd}'
             p_list.append(test_host[i].exec_cmd(_cmd, background=True, timeout=timeout, port=test_port))
 
@@ -191,7 +191,7 @@ def exec_test_case(host_list, path, server_num=1, client_num=1, rand_host=True, 
             p_list.append(test_host[i].exec_cmd(_cmd, background=True, timeout=timeout, port=test_port))
 
         if check is True:
-            for i range(app_num):
+            for i in range(app_num):
                 log.info(f'----------------- [ Test p{i + 1}.wait() ] ------------------')
                 p_list[i].wait()
 
