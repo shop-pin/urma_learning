@@ -41,5 +41,6 @@ def pytest_collection_modifyitems(items):
         mark = item.get_closest_marker(name='timeout')
         if mark:
             timeout = mark.args[0]
+            from common.constants import const
             if const.TMOUT != timeout:
                 const.TMOUT = timeout
