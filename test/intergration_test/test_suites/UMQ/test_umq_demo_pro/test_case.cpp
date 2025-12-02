@@ -6,8 +6,8 @@
 
  #include "umq_atom.h"
 
- static int run_test(test_umq_ctx_t *ctx)
- {
+static int run_test(test_umq_ctx_t *ctx)
+{
     int rc = TEST_FAILED, ret;
 
     for (int i = 0; i < 2; i ++) {
@@ -53,9 +53,9 @@
 EXIT:
     sync_time("------------------------------4");
     return rc;
- }
+}
 
- int main(int argc, char *argv[])
+int main(int argc, char *argv[])
 {
     int ret;
     test_umq_ctx_t *ctx = test_umq_ctx_init(argc, argv);

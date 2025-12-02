@@ -71,14 +71,14 @@ int test_umq_str_to_eid(const char *buf, umq_eid_t *eid)
 
 static uint16_t hexStringToUint16(const char *hexString)
 {
-    if (strlen(hexString) < 2 || hexString[0] != '0' || hexString[1 != 'x']) {
+    if (strlen(hexString) < 2 || hexString[0] != '0' || hexString[1] != 'x') {
         TEST_LOG_ERROR("Invalid hex string format\n");
         return 0;
     }
 
     const char *hexPart = hexString + 2;
     long result = strtol(hexPart, NULL, 16);
-    if (result < 0 || resut > UINT16_MAX) {
+    if (result < 0 || result > UINT16_MAX) {
         TEST_LOG_ERROR("Value out of uint16_t range\n");
         return 0;
     }
@@ -89,12 +89,12 @@ static uint16_t hexStringToUint16(const char *hexString)
 void test_get_ubmm_cna(test_umq_ctx_t *ctx)
 {
     char cmd_cna[MAX_LINE_LENGTH];
-    exec_cmd(cmd_cna, MAX_LINE_LENGTH, "cat /sys/bus/ub/devices/00001/primary_cna")
+    exec_cmd(cmd_cna, MAX_LINE_LENGTH, "cat /sys/bus/ub/devices/00001/primary_cna");
     ctx->cna = static_cast<uint32_t>(hexStringToUint16(cmd_cna));
     TEST_LOG_INFO("this host cna=%u\n", ctx->cna);
 }
 
-void test_get_ubmm_eid(test_umq_ctx_t, *ctx)
+void test_get_ubmm_eid(test_umq_ctx_t *ctx)
 {
     char cmd_eid[MAX_LINE_LENGTH];
     exec_cmd(cmd_eid, MAX_LINE_LENGTH, "cat /sys/bus/ub/devices/00001/eid");
@@ -172,11 +172,11 @@ int set_trans_dev_info(test_umq_ctx_t *ctx, umq_dev_assign_t *dev_info, umq_dev_
     } else if (assign_mode == UMQ_DEV_ASSIGN_MODE_EID) {
         dev_info->assign_mode = UMQ_DEV_ASSIGN_MODE_EID;
         umq_eid_t eid = {0};
-        ret = test_umq_str_to_eid(ctx->ctx->eid, &eid)
+        ret = test_umq_str_to_eid(ctx->ctx->eid, &eid);
         if (ret != TEST_SUCCESS) {
             TEST_LOG_ERROR("test_umq_str_to_eid failed\n");
         }
-        (void)memcpy(&dev_info->eid.eid, &eid, sizeof(eid));
+        (void *)memcpy(&dev_info->eid.eid, &eid, sizeof(eid));
         TEST_LOG_INFO("eid=%s\n", ctx->ctx->eid);
     } else {
         TEST_LOG_ERROR("error assign_mode\n");
@@ -194,7 +194,7 @@ int set_umq_init_cfg(test_umq_ctx_t *ctx, umq_dev_assign_mode_t assign_mode, umq
 
     if (trans_mode == UMQ_TRANS_MODE_UBMM_PLUS) {
         test_get_ubmm_cna(ctx);
-        ctx->flag.cna = ctx->cna;
+        ctx->cfg.cna = ctx->cna;
         test_get_ubmm_eid(ctx);
         ctx->cfg.ubmm_eid = ctx->eid;
     }
@@ -212,7 +212,7 @@ int test_umq_init(test_umq_ctx_t *ctx, bool set_default)
         TEST_LOG_ERROR("umq_init failed, ret=%d\n", ret);
         return TEST_FAILED;
     }
-    if (ctx->async_ops.flag == ASYNC_FLAG_ENABLE) {
+    if (ctx->async_ops.flag == CQ_EVENT_FLAG_ENABLE) {
         ctx->async_ops.epoll_fd = epoll_create1(0);
         if (ctx->async_ops.epoll_fd < 0) {
             TEST_LOG_ERROR("epoll_create1 failed, ret=%d\n", ctx->async_ops.epoll_fd);
@@ -242,13 +242,13 @@ int set_umq_creat_option(test_umq_ctx_t *ctx, bool all_interrupt)
     }
     for (uint32_t i = 0; i < ctx->umqh_num; i++) {
         ctx->umqh_ops[i].option.trans_mode = ctx->trans_mode;
-        (void)memcpy(&ctx->umqh_ops[i].option.dev_info, &ctx->cfg.trans_info[0].dev_info,sizeof(umq_dev_assign_t));
+        (void *)memcpy(&ctx->umqh_ops[i].option.dev_info, &ctx->cfg.trans_info[0].dev_info,sizeof(umq_dev_assign_t));
 
         struct timeval tval;
         struct tm log_time;
         (void)gettimeofday(&tval, NULL);
         (void)localtime_r(&tval.tv_sec, &log_time);
-        ret = sprintf(ctx->umqh_ops[i].option.name, "%u-%u-%4d%02d%02d%02d%02d%02d", ctx->app_id, i, log_time_tm_year + 1900, 
+        ret = sprintf(ctx->umqh_ops[i].option.name, "%u-%u-%4d%02d%02d%02d%02d%02d", ctx->app_id, i, log_time.tm_year + 1900, 
             log_time.tm_mon + 1, log_time.tm_mday, log_time.tm_hour, log_time.tm_min, log_time.tm_sec);
             if (ret <= 0) {
                 TEST_LOG_ERROR("ctx->umqh_ops[%u] set create option name failed\n", i);
@@ -325,13 +325,13 @@ int test_umq_create(test_umq_ctx_t *ctx, bool set_default)
     ctx->umqh_num = 0;
     for (uint32_t i = 0; i < umqh_num; i++) {
         ctx->umqh_ops[i].src_app_id = ctx->app_id;
-        ctx->umqh_ops[i].qh = umq_create(&ctx->umqh_ops[i],option);
+        ctx->umqh_ops[i].qh = umq_create(&ctx->umqh_ops[i].option);
         if (ctx->umqh_ops[i].qh == UMQ_INVALID_HANDLE) {
-            TEST_LOG_ERROR("tx->umqh_ops[%u] umq_create failed\n", i);
+            TEST_LOG_ERROR("ctx->umqh_ops[%u] umq_create failed\n", i);
         } else {
             ctx->umqh_num++;
         }
-        if (ctx->async_ops.flag == ASYNC_FLAG_ENABLE && ctx->umqh_ops[i].option.mode == UMQ_MODE_INTERRUPT) {
+        if (ctx->async_ops.flag == CQ_EVENT_FLAG_ENABLE && ctx->umqh_ops[i].option.mode == UMQ_MODE_INTERRUPT) {
             rc += test_umq_interrupt_fd_get(&ctx->umqh_ops[i]);
         }
     }
@@ -371,16 +371,16 @@ int test_umq_bind_info_get(test_umq_ctx_t *ctx)
 {
     int success_num = 0, ret;
     for (uint32_t i = 0; i < ctx->umqh_num; i++) {
-        ret = umq_bind_info_get(ctx->umqh_ops[i].qh, ctx->umqh_ops[i].l_binfo, UMQ_MAX_BIND_INFO_SIZE);
-        if (ret == 0) {
+        ret = umq_bind_info_get(ctx->umqh_ops[i].qh, ctx->umqh_ops[i].l_binfo, TEST_UMQ_MAX_BIND_INFO_SIZE);
+        if (ret <= 0) {
             TEST_LOG_ERROR("ctx->umqh_ops[%u] umq_bind_info_get failed\n", i);
         } else {
-            ctx->umqh_ops[i].l_binfo_l = ret;
+            ctx->umqh_ops[i].l_binfo_len = ret;
             success_num++;
         }
     }
     if (success_num > 0) {
-        ctx->ctx->flag |= CTX_FLAG_UMQ_L_BINFO_GET;
+        ctx->ctx_flag |= CTX_FLAG_UMQ_L_BINFO_GET;
     }
     if (ctx->umqh_num == success_num) {
         return TEST_SUCCESS;
@@ -407,7 +407,7 @@ void test_exchange_bind_info(test_umq_ctx_t *ctx, uint32_t src_app_id, uint32_t 
         sinfo.l_qidx = l_qidx;
         sinfo.r_qidx = r_qidx;
         sinfo.bind_info_len = ctx->umqh_ops[l_qidx].l_binfo_len;
-        (void)memcpy(&sinfo.bind_info, &ctx->umqh_ops[l_qidx].l_binfo, UMQ_MAX_BIND_INFO_SIZE);
+        (void *)memcpy(&sinfo.bind_info, &ctx->umqh_ops[l_qidx].l_binfo, TEST_UMQ_MAX_BIND_INFO_SIZE);
     }
 
     if (ctx->app_id != dst_app_id) {
@@ -418,8 +418,8 @@ void test_exchange_bind_info(test_umq_ctx_t *ctx, uint32_t src_app_id, uint32_t 
         for (uint32_t i = 0; i < ctx->umqh_num; i++) {
             if (i == rinfo.r_qidx) {
                 ctx->umqh_ops[i].r_qidx = rinfo.l_qidx;
-                ctx->umqh_ops[i].r_binfo = rinfo.bind_info_len;
-                (void)memcpy(&ctx->umqh_ops[i].r_binfo, &rinfo.bind_info, UMQ_MAX_BIND_INFO_SIZE);
+                ctx->umqh_ops[i].r_binfo_len = rinfo.bind_info_len;
+                (void *)memcpy(&ctx->umqh_ops[i].r_binfo, &rinfo.bind_info, TEST_UMQ_MAX_BIND_INFO_SIZE);
                 ctx->umqh_ops[i].dst_app_id = rinfo.src_app_id;
             }
         }
@@ -446,7 +446,7 @@ static bool is_all_zero(const uint8_t *array, size_t length)
 int test_umq_bind_one(umqh_ops_t *umqh_ops)
 {
     int ret;
-    if (umqh_ops->r_binfo_len == 0 || is_all_zero(umqh_ops->r_binfo, UMQ_MAX_BIND_INFO_SIZE)) {
+    if (umqh_ops->r_binfo_len == 0 || is_all_zero(umqh_ops->r_binfo, TEST_UMQ_MAX_BIND_INFO_SIZE)) {
         return TEST_SUCCESS;
     }
     return umq_bind(umqh_ops->qh, umqh_ops->r_binfo, umqh_ops->r_binfo_len);
@@ -455,7 +455,7 @@ int test_umq_bind_one(umqh_ops_t *umqh_ops)
 int test_umq_unbind_one(umqh_ops_t *umqh_ops)
 {
     int ret;
-    if (umqh_ops->r_binfo_len == 0 || is_all_zero(umqh_ops->r_binfo, UMQ_MAX_BIND_INFO_SIZE)) {
+    if (umqh_ops->r_binfo_len == 0 || is_all_zero(umqh_ops->r_binfo, TEST_UMQ_MAX_BIND_INFO_SIZE)) {
         return TEST_SUCCESS;
     }
     return umq_unbind(umqh_ops->qh);
@@ -562,16 +562,16 @@ static void print_md5(uint8_t digest[MD5_DIGEST_LENGTH])
     printf("\n");
 }
 
-static void generate_random_data(char *data, size_t data_size)
+static void generate_random_data(char *data, size_t data_size, uint32_t *seed = nullptr)
 {
-    unsigned int seed = (unsigned int)get_timestamp_ns();
+    unsigned int seedd = (seed == nullptr) ?  (unsigned int)get_timestamp_ns() : *seed;
     for (int i = 0; i < (data_size - 1); i++) {
-        *(data + i) = 'a' + rand_r(&seed) % LETTERS_NUM;
+        *(data + i) = 'a' + rand_r(&seedd) % LETTERS_NUM;
     }
     *(data + data_size - 1) = '\0';
 }
 
-static int check_buf_data_diff(char * data, uint8_t digest[]MD5_DIGEST_LENGTH)
+static int check_buf_data_diff(char * data, uint8_t digest[MD5_DIGEST_LENGTH])
 {
     uint8_t ldigest[MD5_DIGEST_LENGTH];
     md5_hash(data, ldigest);
@@ -586,7 +586,7 @@ int test_umq_buf_fill(umqh_ops_t *umqh_ops, umq_buf_t *buf, const char *data, ui
     if (g_test_umq_ctx.cfg.headroom_size == 0) {
         buf->io_direction = UMQ_IO_TX;
         if (data_size <= UMQ_QBUF_BLOCK_SIZE) {
-            (void)memcpy(buf->buf_data, data, data_size);
+            (void *)memcpy(buf->buf_data, data, data_size);
             buf->data_size = data_size;
             buf->total_data_size = data_size;
         } else {
@@ -611,11 +611,16 @@ int test_umq_buf_fill(umqh_ops_t *umqh_ops, umq_buf_t *buf, const char *data, ui
     header->data_type = SMALL_IO_HAS_RSP;
     header->data_size = data_size;
     header->total_size = data_size;
-    md5_hash(data, header->digest);
+    if (data != nullptr) {
+        md5_hash(data, header->digest);
+    }
+    
 
     buf->buf_data += TEST_DATA_HEADER_SIZE;
     buf->headroom_size = TEST_DATA_HEADER_SIZE;
-    (void)memcpy(buf->buf_data, data, buf_size);
+    if (data != nullptr) {
+        (void *)memcpy(buf->buf_data, data, buf_size);
+    }
     buf->data_size = data_size;
     buf->total_data_size = data_size;
 
@@ -628,7 +633,7 @@ int test_umq_buf_fill(umqh_ops_t *umqh_ops, umq_buf_t *buf, const char *data, ui
     return TEST_SUCCESS;
 }
 
-int tets_umq_buf_parse(umq_buf_t *buf, const char *data, uint32_t data_size)
+int test_umq_buf_parse(umq_buf_t *buf, const char *data, uint32_t data_size)
 {
     int ret = TEST_SUCCESS;
     TEST_LOG_INFO("buf->total_data_size=%u buf->headroom_size=%u\n", buf->total_data_size, buf->headroom_size);
@@ -682,7 +687,7 @@ umq_buf_t *test_umq_buf_alloc(umqh_ops_t *umqh_ops, umq_alloc_option_t *option, 
 {
     uint32_t request_qbuf_num = data_size % UMQ_QBUF_BLOCK_SIZE == 0 ? data_size / UMQ_QBUF_BLOCK_SIZE : data_size / UMQ_QBUF_BLOCK_SIZE + 1;
     uint32_t request_size = data_size > UMQ_QBUF_BLOCK_SIZE ? UMQ_QBUF_BLOCK_SIZE : data_size;
-    TEST_LOG_INFO("umq_buf_alloc request_size=%u request_qbuf=%u\n", data_size, request_qbuf_num)
+    TEST_LOG_INFO("umq_buf_alloc request_size=%u request_qbuf_num=%u\n", data_size, request_qbuf_num);
     uint64_t umqh = get_buf_alloc_umqh(umqh_ops, data_size);
 
     umq_buf_t *buf = umq_buf_alloc(request_size, request_qbuf_num, umqh, option);
@@ -762,51 +767,69 @@ void test_data_args_fill(test_data_args_t *data_args)
         return;
     }
 
-    data_args->data_size = (data_aargs->data_size == 0) ? 1024 : data_args->data_size;
+    data_args->data_size = (data_args->data_size == 0) ? 1024 : data_args->data_size;
     data_args->data = (char *)malloc(data_args->data_size);
+    if (data_args->seed != nullptr) {
+        generate_random_data(data_args->data, data_args->data_size, data_args->seed);
+        return;
+    }
     generate_random_data(data_args->data, data_args->data_size);
 }
 
 
-int test_umq_post_rx_buf(umqh_ops_t *umqh_ops, uint32_t depth)
+int test_umq_post_rx_buf(umqh_ops_t *umqh_ops, uint32_t depth, uint32_t size, uint64_t *status)
 {
     uint32_t rx_depth = (depth == 0) ? UMQ_MAX_WR_COUNT : depth;
-    umq_buf_t *buf = umq_buf_alloc(umqh_ops->option.rx_buf_size, rx_depth, 0, nullptr);
+    uint32_t buf_size = (size == 0) ? umqh_ops->option.rx_buf_size : size;
+    umq_buf_t *buf = umq_buf_alloc(buf_size, rx_depth, 0, nullptr);
     if (buf == nullptr) {
         TEST_LOG_ERROR("umq_buf_alloc failed\n");
         return TEST_FAILED;
     }
 
     umq_buf_t *bad_buf = nullptr;
-    if (umq_post(umqh_ops-qh, buf, UMQ_IO_RX, &bad_buf) != TEST_SUCCESS) {
+    if (umq_post(umqh_ops->qh, buf, UMQ_IO_RX, &bad_buf) != TEST_SUCCESS) {
         TEST_LOG_ERROR("umq_post rx failed\n");
         umq_buf_free(bad_buf);
         return TEST_FAILED;
     }
-    return TEST_SUCCESS;
-}
-
-int test_umq_post_rx(test_umq_ctx_t *ctx, uint32_t depth)
-{
-    int ret;
-
-    for(uint32_t i = 0; i < ctx->umqh_num; i++) {
-        ret = test_umq_post_rx_buf(&ctx->umqh_ops[i], depth);
-        if (ret != TEST_SUCCESS) {
-            TEST_LOG_ERROR("ctx->umqh_ops[%u] umq_post rx failed\n", i);
-            return TEST_FAILED;
-        }
+    if (status) {
+        usleep(STATUS_SLEEP_TIME_US);
+        *status += buf->status;
     }
     return TEST_SUCCESS;
 }
 
-int test_umq_post_tx_buf(umqh_ops_t *umqh_ops, const char *data, uint32_t data_size)
+int test_umq_post_rx(test_umq_ctx_t *ctx, uint32_t depth, umqh_ops_t *umqh_ops, uint64_t *status)
+{
+    int ret;
+
+    if (umqh_ops == nullptr) {
+        for(uint32_t i = 0; i < ctx->umqh_num; i++) {
+            ret = test_umq_post_rx_buf(&ctx->umqh_ops[i], depth);
+            if (ret != TEST_SUCCESS) {
+                TEST_LOG_ERROR("ctx->umqh_ops[%u] umq_post rx failed\n", i);
+                return TEST_FAILED;
+            }
+        }
+    } else {
+        ret = test_umq_post_rx_buf(umqh_ops, depth);
+        if (ret != TEST_SUCCESS) {
+            TEST_LOG_INFO("umq_post rx failed\n")
+            return TEST_FAILED;
+        }
+    }
+    
+    return TEST_SUCCESS;
+}
+
+int test_umq_post_tx_buf(umqh_ops_t *umqh_ops, const char *data, uint32_t data_size, uint64_t *status)
 {
     umq_buf_t *buf = nullptr;
     if (g_test_umq_ctx.cfg.headroom_size == 0) {
         buf = test_umq_buf_alloc(umqh_ops, nullptr, data, data_size);
     } else {
-        uint32_t total_size = data_size + g_test_umq_ctx.cfg.headroom_size
+        uint32_t total_size = data_size + g_test_umq_ctx.cfg.headroom_size;
         umq_alloc_option_t option = {0};
         option.flag = UMQ_ALLOC_FLAG_HEAD_ROOM_SIZE;
         option.headroom_size = g_test_umq_ctx.cfg.headroom_size;
@@ -816,16 +839,28 @@ int test_umq_post_tx_buf(umqh_ops_t *umqh_ops, const char *data, uint32_t data_s
         return TEST_FAILED;
     }
 
-    umq_buf_pro_t *pro = (umq_buf_pro_t *)buf->qbuf_eext;
+    umq_buf_pro_t *pro = (umq_buf_pro_t *)buf->qbuf_ext;
     pro->flag.bs.solicited_enable = 1;
     pro->flag.bs.complete_enable = 1;
-    pro->opcode = UMQ_OPC_SEND;
+    if (umqh_ops->opcode == UMQ_OPC_SEND_IMM) {
+        pro->imm_data = TEST_IMM_DATA;
+        pro->opcode = UMQ_OPC_SEND_IMM;
+        TEST_LOG_INFO("UMQ_OPC_SEND_IMM:%d\n", pro->opcode);
+    } else if (umqh_ops->opcode == UMQ_OPC_SEND || umqh_ops->opcode ==0) {
+        pro->opcode = UMQ_OPC_SEND;
+        TEST_LOG_INFO("UMQ_OPC_SEND:%d\n", pro->opcode);
+    }
+    
 
     umq_buf_t *bad_buf = nullptr;
     if (umq_post(umqh_ops->qh, buf, UMQ_IO_TX, &bad_buf) != TEST_SUCCESS) {
         TEST_LOG_ERROR("umq_post failed\n");
         umq_buf_free(bad_buf);
         return TEST_FAILED;
+    }
+    if (status) {
+        usleep(STATUS_SLEEP_TIME_US);
+        *status += buf->status;
     }
 
     return TEST_SUCCESS;
@@ -847,14 +882,14 @@ int test_umq_poll(uint64_t umqh, umq_io_direction_t direction, umq_buf_t **buf, 
     return ret;
 }
 
-int test_umq_poll_tx_buf(umqh_ops_t *umqh_ops, uint64_t timeout)
+int test_umq_poll_tx_buf(umqh_ops_t *umqh_ops, uint64_t timeout, uint64_t *status)
 {
     umq_buf_t **buf = (umq_buf_t **)calloc(TEST_MAX_POLL_BATCH, sizeof(umq_buf_t *));
     int ret = test_umq_poll(umqh_ops->qh, UMQ_IO_TX, buf, {}, timeout);
     if (ret == TEST_FAILED) {
         return TEST_FAILED;
     }
-    TEST_LOG_INFO("tx polled\n");
+    TEST_LOG_INFO("tx polled %d\n", ret);
     for (int i = 0; i < ret; ++i) {
         umq_buf_t *tmp_buf = buf[i];
         int32_t rest_data_size = (int32_t)tmp_buf->total_data_size;
@@ -866,13 +901,17 @@ int test_umq_poll_tx_buf(umqh_ops_t *umqh_ops, uint64_t timeout)
             }
             tmp_buf = tmp_buf->qbuf_next;
         }
+        if (status) {
+            usleep(STATUS_SLEEP_TIME_US);
+            *status += buf[i]->status;
+        }
         umq_buf_free(buf[i]);
     }
     free(buf);
     return TEST_SUCCESS;
 }
 
-int test_umq_poll_rx_buf(umqh_ops_t *umqh_ops, const char *data, uint32_t data_size, uint64_t timeout)
+int test_umq_poll_rx_buf(umqh_ops_t *umqh_ops, const char *data, uint32_t data_size, uint64_t timeout, uint64_t *status)
 {
     umq_buf_t **buf = (umq_buf_t **)calloc(TEST_MAX_POLL_BATCH, sizeof(umq_buf_t *));
     int ret = test_umq_poll(umqh_ops->qh, UMQ_IO_RX, buf, {}, timeout);
@@ -880,13 +919,26 @@ int test_umq_poll_rx_buf(umqh_ops_t *umqh_ops, const char *data, uint32_t data_s
         return TEST_FAILED;
     }
     TEST_LOG_INFO("rx polled\n");
-    ret = test_umq_buf_parse(buf[0], data, data_size);
+    if (data != nullptr)
+    {
+        if (!umqh_ops->not_check_data) {
+            ret = test_umq_buf_parse(buf[0], data, data_size);
+        }
+    }
+
     buf[0] = nullptr;
     for (int i = 0; i < ret; i++) {
+        if (status) {
+            usleep(STATUS_SLEEP_TIME_US);
+            *status += buf[i]->status;
+        }
         umq_buf_free(buf[i]);
     }
     free(buf);
-    return ret;
+    if (ret == TEST_FAILED) {
+        return ret;
+    }
+    return TEST_SUCCESS;
 }
 
 void test_umq_flush(umqh_ops_t *umqh_ops, umq_io_direction_t direction, uint64_t timeout)
@@ -897,10 +949,19 @@ void test_umq_flush(umqh_ops_t *umqh_ops, umq_io_direction_t direction, uint64_t
     while (get_timestamp_ms() - start < DEFAULT_FLUSH_TIME_MS) {
         ret = umq_poll(umqh_ops->qh, direction, buf, TEST_MAX_POLL_BATCH);
         if (ret > 0) {
-            for (int i = 0; i < ret; i++) {
+            for (int i = 0; i < ret; ++i) {
+                umq_buf_t *tmp_buf = buf[i];
+                int32_t rest_data_size = (int32_t)tmp_buf->total_data_size;
+                while (tmp_buf && rest_data_size > 0) {
+                    rest_data_size -= (int32_t)tmp_buf->data_size;
+                    if (rest_data_size <= 0) {
+                        tmp_buf->qbuf_next = NULL;
+                        break;
+                    }
+                    tmp_buf = tmp_buf->qbuf_next;
+                }
                 umq_buf_free(buf[i]);
             }
-            continue;
         }
     }
 }
@@ -909,7 +970,7 @@ int test_umq_pro_func_req(test_data_args_t *data_args)
 {
     int ret, nevents;
     if (g_test_umq_ctx.cfg.headroom_size == 0) {
-        TEST_LOG_ERROR("umq_init_cfgheadroom_size is 0\n");
+        TEST_LOG_ERROR("umq_init_cfg.headroom_size is 0\n");
         return TEST_FAILED;
     }
     if (test_umq_rearm_interrupt(data_args->umqh_ops, UMQ_IO_TX)) {
@@ -924,7 +985,7 @@ int test_umq_pro_func_req(test_data_args_t *data_args)
         return TEST_FAILED;
     }
     CHECK_FREE(data_args->data);
-    if (g_test_umq_ctx.async_ops.flag == ASYNC_FLAG_ENABLE) {
+    if (g_test_umq_ctx.async_ops.flag == CQ_EVENT_FLAG_ENABLE) {
         nevents = test_umq_get_cq_event(data_args->umqh_ops, UMQ_IO_TX);
         if (nevents < 1) {
             TEST_LOG_ERROR("test_umq_get_cq_event failed\n");
@@ -957,7 +1018,7 @@ int test_umq_pro_func_rsp(test_data_args_t *data_args)
         TEST_LOG_ERROR("test_umq_rearm_interrupt failed\n");
         return TEST_FAILED;
     }
-    if (g_test_umq_ctx.async_ops.flag == ASYNC_FLAG_ENABLE) {
+    if (g_test_umq_ctx.async_ops.flag == CQ_EVENT_FLAG_ENABLE) {
         nevents = test_umq_get_cq_event(data_args->umqh_ops, UMQ_IO_RX, 30 * 1000);
         if (nevents < 1) {
             TEST_LOG_ERROR("test_umq_get_cq_event failed\n");
