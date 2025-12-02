@@ -22,7 +22,7 @@ local_path = os.path.dirname(os.path.abspath(__file__))
 
 UMQ_TRANS_MODE_IP = 0
 UMQ_TRANS_MODE_UB = 1
-UMQ_TRANS_MODE_IB = 3
+UMQ_TRANS_MODE_IB = 2
 UMQ_TRANS_MODE_IPC = 3
 UMQ_TRANS_MODE_UB_PLUS = 5
 UMQ_TRANS_MODE_UBMM_PLUS = 7
@@ -33,7 +33,7 @@ def prepare_test_case(host_list, case_path)
     case_out = os.path.join(case_path, "test_case")
     case_log = os.path.join(case_path, "*.log")
     _cmd = f'cd {local_path};' \
-        f'g++ ../common/common.c ../common/test_log.c ../common_test_thread_pool.c ../common/ub_get_clock.c ' \
+        f'g++ ../common/common.c ../common/test_log.c ../common/test_thread_pool.c ../common/ub_get_clock.c ' \
         f'umq_atom.cpp {case_cpp} -g -O0 - o {case_out} '
     if os.path.exists(public_cpp):
         _cmd += f"{public_cpp} "
@@ -55,16 +55,16 @@ def prepare_test_case(host_list, case_path)
             raise
 
 
-def gen_randon_port(host_list, port_num=2):
+def gen_random_port(host_list, port_num=2):
     tcp_port = 20000
     test_port = 30000
     used_ports = set()
     for host in host_list:
-        _cmd = "netstat -ant|grep '^tcp'|awk '{print $4}'|awk -F':' '{PRINT $NF}'|sort | uniq"
-        for port in hosrt.exec_cmd(_cmd, silence=True).stdout.split("\r\n"):
+        _cmd = "netstat -ant|grep '^tcp'|awk '{print $4}'|awk -F':' '{print $NF}'|sort | uniq"
+        for port in host.exec_cmd(_cmd, silence=True).stdout.split("\r\n"):
             if port.isdigit():
                 used_ports.add(int(port))
-    for i in range(100);
+    for i in range(100):
     tcp_port = random.ranint(20000, 30000)
     test_port = tcp_port + 10000
     if tcp_port not in used_ports and test_port not in used_ports:
@@ -91,16 +91,16 @@ def get_test_dev(case_name, mode, test_host, host_idx):
     test_dev2 = None
 
     if hasattr(test_host[0], "test_nic2"):
-        test_dev = test_host[host_idx].test_nic2 if mode == 'IB' or mode == 'UB' sle test_host[host_idx].test_nic2_dev
+        test_dev = test_host[host_idx].test_nic2 if mode == 'IB' or mode == 'UB' esle test_host[host_idx].test_nic2_dev
     else:
-        test_dev = test_host[host_idx].test_nic1 if mode == 'IB' or mode == 'UB' sle test_host[host_idx].test_nic1_dev
-        test_dev2 = test_host[host_idx].test_nic1_dev if mode == 'IB' or mode == 'UB' sle test_host[host_idx].test_nic1
+        test_dev = test_host[host_idx].test_nic1 if mode == 'IB' or mode == 'UB' esle test_host[host_idx].test_nic1_dev
+        test_dev2 = test_host[host_idx].test_nic1_dev if mode == 'IB' or mode == 'UB' esle test_host[host_idx].test_nic1
     return test_dev, test_dev2
 
 
 def get_test_eid(case_name, mode, test_host, host_idx):
     test_eid = "
-    if hasattr(test_host[0], "test_nic2")":
+    if hasattr(test_host[0], "test_nic2"):
         test_eid = test_host[host_idx].test_nic2_eid
     else:
         test_eid = test_host[host_idx].test_nic1_eid
@@ -118,12 +118,12 @@ def get_ip_addrs_cmd(ip_addrs):
 
 def exec_test_case(host_list, path, server_num=1, client_num=1, rand_host=True, **kwargs):
     log.info(f'---------- [ Test path = {path}] ----------')
-    tcp_port, _test_port = gen_randon_port(host_list)
-    seed = random.ranint(0, 10000)
+    tcp_port, _test_port = gen_random_port(host_list)
+    seed = random.randint(0, 10000)
     app_num = server_num + client_num
     check = kwargs.get("check", True)
     debug = kwargs.get("debug", False)
-    ip_version = kwargs.get("ip_version", False)
+    ip_version = kwargs.get("ip_version", None)
     case_path = kwargs.get("case_path", "''")
     _case_name = path.split('/')[-1]
     timeout = kwargs.get("timeout", 1800)
@@ -140,22 +140,26 @@ def exec_test_case(host_list, path, server_num=1, client_num=1, rand_host=True, 
         if mode != [] and _mode not in mode:
             continue
         test_host = []
-        log.info(f'---------- [ mode is {mode}] ----------')
+        log.info(f'---------- [ mode is {_mode}] ----------')
         dev_type = _mode
         if 'UB' in _mode:
             rand_host = False
             dev_type = 'UB'
         if rand_host is True:
-            for i inrange(app_num):
+            for i in range(app_num):
                 test_host.append(random.choice(host_list))
-        else: for i in range(server_num):
-            test_host.append(host_list[0])
-        for i in range(server_num, app_num):
-            if 'IPC' in get_trans_mode:
+        else: 
+            for i in range(server_num):
                 test_host.append(host_list[0])
-            else:
-                test_host.append(host_list[1])
+            for i in range(server_num, app_num):
+                if 'IPC' in get_trans_mode:
+                    test_host.append(host_list[0])
+                else:
+                    test_host.append(host_list[1])
         
+        _test_ip = f'-i {test_host[0].test_nic1_ip}, {test_host[-1].test_nic1_ip} ' \
+            f'-I {test_host[0].test_nic1_ipv6}, {test_host[-1].test_nic1_ipv6} '
+
         trans_mode = get_trans_mode(_mode)
 
         _appid = 1
@@ -167,7 +171,7 @@ def exec_test_case(host_list, path, server_num=1, client_num=1, rand_host=True, 
 
 
         for i in range(1, server_num):
-            log.info(f'-------------------- strat app{i} server ---------------------')
+            log.info(f'-------------------- start app{i} server ---------------------')
             _appid = i + 1
             test_dev, test_dev2 = get_test_dev(_case_name, dev_type, test_host, i)
             test_eid = get_test_eid(_case_name, dev_type, test_host, i)
@@ -177,7 +181,7 @@ def exec_test_case(host_list, path, server_num=1, client_num=1, rand_host=True, 
             p_list.append(test_host[i].exec_cmd(_cmd, background=True, timeout=timeout, port=test_port))
 
         for i in range(server_num, app_num):
-            log.info(f'-------------------- strat app{i} client ---------------------')
+            log.info(f'-------------------- start app{i} client ---------------------')
             _appid = i + 1
             test_dev, test_dev2 = get_test_dev(_case_name, dev_type, test_host, i)
             test_eid = get_test_eid(_case_name, dev_type, test_host, i)
@@ -196,6 +200,6 @@ def exec_test_case(host_list, path, server_num=1, client_num=1, rand_host=True, 
                 if p_list[i].ret != 0:
                     log.error(f"exec_test_case failed! p_list[{i}].ret={p_list[i].ret}!")
                     raise
-            
+            p_list = []
         return p_list
             
