@@ -15,19 +15,17 @@ static int run_test()
     int ret = 0;
     int rc = TEST_FAILED;
     if (ctx->app_id == PROC_2) {
-        char cmd0[100] = "nohup ums_run qperf -lp 4549 &";
-        exec_cmd(cmd0);
-        char cmd1[100] = "nohup qperf -lp 4550 &";
-        exec_cmd(cmd1);
+        char buf0[MAX_EXEC_CMD_RET_LEN];
+        exec_cmd(buf0, MAX_EXEC_CMD_RET_LEN, "nohup ums_run qperf -lp 4549 &");
+        char buf1[MAX_EXEC_CMD_RET_LEN];
+        exec_cmd(buf1, MAX_EXEC_CMD_RET_LEN, "nohup qperf -lp 4549 &");
     }
     sync_time("----------------------------1");
     if (ctx->app_id == PROC_1) {
-        char cmd2[100];
-        sprinf(cmd2, "nohup ums_run qperf %s -lp 4549 -t 0 -m 8192 tcp_lat &", server_ip);
-        exec_cmd(cmd2);
-        char cmd3[100];
-        sprinf(cmd3, "nohup ums_run qperf %s -lp 4550 -t 0 -m 8192 tcp_lat &", server_ip);
-        exec_cmd(cmd3);
+        char buf2[MAX_EXEC_CMD_RET_LEN];
+        exec_cmd(buf2, MAX_EXEC_CMD_RET_LEN, "nohup ums_run qperf %s -lp 4549 -t 0 -m 8192 tcp_lat &", server_ip);
+        char buf3[MAX_EXEC_CMD_RET_LEN];
+        exec_cmd(buf3, "nohup ums_run qperf %s -lp 4550 -t 0 -m 8192 tcp_lat &", server_ip);
     }
     sync_time("----------------------------2");
     int check_num_ums = query_proc_net_ums_detail_stram_num("False", "4549");

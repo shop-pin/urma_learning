@@ -17,23 +17,20 @@ static int run_test()
     int ret = 0;
     int rc = TEST_FAILED;
     for (int i=0; i<vec_random.size(); i++) {
-        char cmd_revise_snd[100];
-        sprintf(cmd_revise_snd, "echo %d > /proc/sys/net/ums/snd_buf", vec_random[i]);
-        exec_cmd(cmd_revise_snd);
-        char cmd_revise_rcv[100];
-        sprintf(cmd_revise_rcv, "echo %d > /proc/sys/net/ums/rcv_buf", vec_random[i]);
-        exec_cmd(cmd_revise_rcv);
+        char cmd_revise_snd[MAX_EXEC_CMD_RET_LEN];
+        exec_cmd(cmd_revise_snd, MAX_EXEC_CMD_RET_LEN, "echo %d > /proc/sys/net/ums/snd_buf", vec_random[i]);
+        char cmd_revise_rcv[MAX_EXEC_CMD_RET_LEN];
+        exec_cmd(cmd_revise_rcv, MAX_EXEC_CMD_RET_LEN, "echo %d > /proc/sys/net/ums/rcv_buf", vec_random[i]);
 
         if (ctx->app_id == PROC_2) {
-            char cmd0[100] = "nohup ums_run qperf -lp 4549 &";
-            exec_cmd(cmd0);
+            char cmd0[MAX_EXEC_CMD_RET_LEN];
+            exec_cmd(cmd0, MAX_EXEC_CMD_RET_LEN, "nohup ums_run qperf -lp 4549 &");
 
         }
         sync_time("----------------------------1");
         if (ctx->app_id == PROC_1) {
-            char cmd1[100];
-            sprinf(cmd1, "nohup ums_run qperf %s -lp 4549 -t 0 -m 8192 tcp_lat &", server_ip);
-            exec_cmd(cmd1);
+            char cmd1[MAX_EXEC_CMD_RET_LEN];
+            exec_cmd(cmd1, MAX_EXEC_CMD_RET_LEN, "nohup ums_run qperf %s -lp 4549 -t 0 -m 8192 tcp_lat &", server_ip);
         }
         sync_time("----------------------------2");
         char server_ip_str[10]={0};
@@ -43,9 +40,11 @@ static int run_test()
             ret = -1;
         }
         CHKERR_JUMP(ret != TEST_SUCCESS, "ums connection error", EXIT);
-        exec_cmd("pkill -9 qperf");
     }
     
+    char close_qperf[MAX_EXEC_CMD_RET_LEN];
+    exec_cmd(close_qperf, MAX_EXEC_CMD_RET_LEN, "pkill -9 qperf");
+    rc = UMS_SUCCESS;
     rc = UMS_SUCCESS;
 EXIT:
     sync_time("----------------------------3");

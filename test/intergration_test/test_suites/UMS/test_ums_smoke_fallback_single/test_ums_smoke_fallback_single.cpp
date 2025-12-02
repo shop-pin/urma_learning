@@ -17,15 +17,13 @@ static int run_test()
     int ret = 0;
     int rc = TEST_FAILED;
     if (ctx->app_id == PROC_2) {
-        char serv_cmd[300];
-        sprintf(serv_cmd, "nohup ums_run qperf -lp ${i} &");
-        exec_cmd(serv_cmd);
+        char serv_cmd[MAX_EXEC_CMD_RET_LEN];
+        exec_cmd(serv_cmd, MAX_EXEC_CMD_RET_LEN, "nohup qperf -lp ${i} &");
     }
     sync_time("----------------------------1");
     if (ctx->app_id == PROC_1) {
-        char clnt_cmd[300];
-        sprintf(clnt_cmd, "nohup ums_run qperf %s -lp ${i} -m 8192 -t 0 tcp_bw 2>&1 &", serv_ip);
-        exec_cmd(clnt_cmd);
+        char clnt_cmd[MAX_EXEC_CMD_RET_LEN];
+        exec_cmd(clnt_cmd, MAX_EXEC_CMD_RET_LEN, "nohup ums_run qperf %s -lp ${i} -m 8192 -t 0 tcp_bw 2>&1 &", serv_ip);
     }
     sync_time("----------------------------2");
     
@@ -36,9 +34,8 @@ static int run_test()
     }
     CHKERR_JUMP(ret != TEST_SUCCESS, "fallback single connect failed", EXIT);
 
-    char close_qperf[50];
-    sprintf(close_qperf, "pkill -9 qperf");
-    exec_cmd(close_qperf);
+    char close_qperf[MAX_EXEC_CMD_RET_LEN];
+    exec_cmd(close_qperf, MAX_EXEC_CMD_RET_LEN, "pkill -9 qperf");
     rc = UMS_SUCCESS;
 EXIT:
     sync_time("----------------------------3");
