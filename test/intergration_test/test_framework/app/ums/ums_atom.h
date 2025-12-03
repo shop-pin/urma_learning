@@ -36,6 +36,9 @@ typedef struct {
 } test_ums_ctx_t;
 
 test_ums_ctx_t *test_ums_ctx_init(int argc, char *argv[], int thread_num);
+int test_ums_server_uninit(test_ums_ctx_t *ctx);
+int test_ums_client_uninit(test_ums_ctx_t *ctx);
+int test_ums_ctx_uninit(test_ums_ctx_t *ctx);
 int query_proc_net_ums_detail_stram_num(const char *fbk, const char *msg);
 
 #endif

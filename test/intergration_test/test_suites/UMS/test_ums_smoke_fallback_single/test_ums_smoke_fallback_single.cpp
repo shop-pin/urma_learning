@@ -43,12 +43,9 @@ EXIT:
 }
 
 int main(int argc, char *argv[]) {
-    int rc;
-    main_init_test(argc, argv);
-    sync_time("### run_test begin ###");
-    rc = run_test();
-    sync_time("### run_test end ###");
-    TEST_LOG_INFO("\ntest result is %d\n", rc);
-    main_exit();
-    return rc;
+    int ret;
+    test_ums_ctx_t *ctx = test_ums_ctx_init(argc, argv, 1);
+    ret = run_test(ctx);
+    ret += test_ums_ctx_uninit(ctx);
+    return ret;
 }
