@@ -13,7 +13,7 @@
 #include <string.h>
 #include <sys/time.h>
 #include <unistd.h>
-#include <algorithm.h>
+#include <algorithm>
 #include <limits.h>
 #include <sys/socket.h>
 #include <sys/syscall.h>
@@ -33,15 +33,15 @@
 #define TEST_MAX_BUF_LEN (1024)
 
 #define ALLOCATOR_SIZE (64 * 1024 * 1024)
-#define ALLOCATOR_SIZE_BLOCK_SIZE (4 * 1024)
-#define ALLOCATOR_SIZE_BLOCK_COUNT (ALLOCATOR_SIZE / ALLOCATOR_SIZE_BLOCK_SIZE) 
+#define ALLOCATOR_BLOCK_SIZE (4 * 1024)
+#define ALLOCATOR_SIZE_BLOCK_COUNT (ALLOCATOR_SIZE / ALLOCATOR_BLOCK_SIZE) 
 #define ALLOCATOR_BLOCK_NUM 2 
 #define MAX_ALLOC_SIZE (ALLOCATOR_BLOCK_NUM * ALLOCATOR_SIZE)
 
 #define CLOUD_STORAGE_PRIORITY 4
-#define DEFAULT_RREORITY CLOUD_STORAGE_PRIORITY
+#define DEFAULT_PRIORITY CLOUD_STORAGE_PRIORITY
 
-#define DEFAULT_MSG_SIZE ALLOCATOR_SIZE_BLOCK_SIZE
+#define DEFAULT_MSG_SIZE ALLOCATOR_BLOCK_SIZE
 #define DEFAULT_RX_BUF_SIZE 4096
 #define DEFAULT_RX_DEPTH 64
 #define DEFAULT_TX_DEPTH 64
@@ -52,17 +52,17 @@
 #define DEFAULT_CHANNEL_NUM 1
 #define DEFAULT_QUEUE_NUM 1
 
-#define DEFAULT_FUNC_NAME "FEFAULT_FUNC_NAME"
+#define DEFAULT_FUNC_NAME "DEFAULT_FUNC_NAME"
 #define DEFAULT_FUNC_ID 8388612
 
 #define DEFAULT_INPUT_MSG_SIZE 20
 
 #define DEFAULT_SSL_PSK_ID "urpc_lib_psk_id"
-#define DEFAULT_SSL_PSK_DEY "urpc_lib_psk_key"
+#define DEFAULT_SSL_PSK_KEY "urpc_lib_psk_key"
 
-#define SERVER_POLL_TIMOUT 300
+#define SERVER_POLL_TIMEOUT 300
 #define CLINET_POLL_TIMEOUT 10
-#define MILLISECOND_PER_SECOND
+#define MILLISECOND_PER_SECOND 1000
 
 #define URPC_CHANNEL_MAX_R_QUEUE_SIZE (256)
 #define URPC_CLIENT_CHANNEL_ATTACH_MAX (16)
@@ -85,8 +85,8 @@
 #define ACK_SEND_PUSH_WITHOUT_PLOG 3
 #define NO_ACK_RSP_SEND_PUSH_WITHOUT_PLOG 4
 
-#define MAX_RX_SHE 4
-#define MAX_TX_SHE 13
+#define MAX_RX_SGE 4
+#define MAX_TX_SGE 13
 
 #define ASYNC_FLAG_ENABLE 4
 #define ASYNC_FLAG_NOT_EPOLL 5
@@ -122,7 +122,7 @@ typedef struct test_allocator_buf {
     struct test_allocator_buf *next;
 } test_allocator_buf_t;
 
-typedef structtest_allocator_ctx {
+typedef struct test_allocator_ctx {
     struct test_allocator_buf *allocator_buf;
     uint32_t total_count;
     uint32_t free_count;
@@ -132,25 +132,25 @@ typedef struct  {
     bool is_epoll;
     bool *is_polling;
     int *queue_fd;
-    int epoll_fd
-    int epoll_timout;
+    int epoll_fd;
+    int epoll_timeout;
 } queue_ops_t;
 
 typedef struct {
-    int epoll_fdl
+    int epoll_fd;
     int event_fd;
     int flag;
 } async_ops_t;
 
 typedef struct {
-    uint32_t qid[URPC_CHANNEL_MAX_R_QUEUE_SIZE]
+    uint32_t qid[URPC_CHANNEL_MAX_R_QUEUE_SIZE];
     uint32_t num;
     uint32_t app_id;
 } server_queue_t;
 
 typedef struct {
 uint64_t qh;
-} lqueue_ops_t
+} lqueue_ops_t;
 
 typedef struct {
     uint32_t qid;
@@ -186,7 +186,7 @@ typedef struct {
     uint64_t func_id;
     uint64_t ctx_flag;
     uint32_t qgrph_num;
-    uint32_t *qgrphs;
+    uint64_t *qgrphs;
     bool cp_is_ipv6;
     bool dp_is_ipv6;
     uint32_t server_num;
@@ -196,7 +196,7 @@ typedef struct {
     channel_ops_t *channel_ops;
     queue_ops_t queue_ops;
     async_ops_t async_ops;
-    urpc_config_t urpc_connfig;
+    urpc_config_t urpc_connig;
     urpc_server_info_t *server_info;
     urpc_qcfg_create_t *queue_cfg;
     urpc_control_plane_config_t *urpc_cp_config;
@@ -210,7 +210,7 @@ typedef struct {
     urpc_ctrl_cb_t ctrl_cb;
     urpc_ssl_config_t ssl_cfg;
     bool co_thd;
-    bool noet_one_by_one;
+    bool not_one_by_one;
 } test_urpc_ctx_t;
 
 typedef void (*test_poll_cb_t)(void);
@@ -220,7 +220,7 @@ typedef struct {
     uint64_t lqueue_handle;
     uint64_t rqueue_handle;
     uint64_t expect_poll_num;
-    uint64_t expect_hit_events;
+    uint32_t expect_hit_events;
     uint64_t timeout;
     uint64_t poll_timeout;
     uint64_t func_id;
@@ -234,7 +234,7 @@ typedef struct {
     uint64_t poll_tx_qh;
     uint64_t poll_rx_qh;
     urpc_call_option_t call_option;
-    urpc_poll_option_t poll_option;
+    urpc_poll_option_t poll_opt;
     test_poll_cb_t poll_cb;
 } test_func_args_t;
 
@@ -284,7 +284,7 @@ extern bool g_test_all_queue_ready;
 int test_str_to_u32(const char *buf, uint32_t *u32);
 void test_urpc_u32_to_eid(uint32_t ipv4, urpc_eid_t *eid);
 int test_urpc_str_to_eid(const char *buf,urpc_eid_t *eid);
-int set_urpc_server_info(test_urpc_ctx_t *ctx, urpc_server_info_t *server, char ipv4[IPV6_ADDR_SIZE], CHAR IPV6[IPV6_ADDR_SIZE], uint16_t port);
+int set_urpc_server_info(test_urpc_ctx_t *ctx, urpc_server_info_t *server, char ipv4[IPV6_ADDR_SIZE], char ipv6[IPV6_ADDR_SIZE], uint16_t port);
 int set_urpc_host_info(test_urpc_ctx_t *ctx, urpc_host_info_t *host, char ipv4[IPV6_ADDR_SIZE], char ipv6[IPV6_ADDR_SIZE], uint16_t port);
 int get_urpc_host_info(urpc_host_info_t *host_info, uint32_t idx = 0);
 int process_ctrl_msg(urpc_ctrl_msg_type_t msg_type, urpc_ctrl_msg_t *ctrl_msg);
@@ -298,8 +298,8 @@ urpc_config_t get_urpc_server_config(test_urpc_ctx_t *ctx);
 urpc_config_t get_urpc_client_config(test_urpc_ctx_t *ctx);
 urpc_config_t get_urpc_server_client_config(test_urpc_ctx_t *ctx);
 
-void set_ctx_ctrl_msg_param(test_urpc_ctx_t, char msg[CTRL_MSG_MAX_SIZE]);
-int test_urpc_ctrl_msg_ctrl_msg_cb_register(test_urpc_ctx_t *ctx);
+void set_ctx_ctrl_msg_param(test_urpc_ctx_t *ctx, char msg[CTRL_MSG_MAX_SIZE]);
+int test_urpc_ctrl_msg_cb_register(test_urpc_ctx_t *ctx);
 int test_async_event_ctrl_add(test_urpc_ctx_t *ctx);
 int test_server_init(test_urpc_ctx_t *ctx, urpc_config_t *urpc_config = nullptr);
 int test_client_init(test_urpc_ctx_t *ctx, urpc_config_t *urpc_config = nullptr);
@@ -325,10 +325,10 @@ int test_queue_interrupt_fd_get(test_urpc_ctx_t *ctx, uint32_t qidx);
 
 int test_urpc_queue_rx_post(test_urpc_ctx_t *ctx, uint32_t rx_num, uint64_t urpc_qh = 0);
 int test_queue_create(test_urpc_ctx_t *ctx, urpc_queue_trans_mode_t trans_mode = QUEUE_TRANS_MODE_JETTY, urpc_qcfg_create_t *queue_cfg = nullptr);
-int test_destory_one_queue(uint64_t queue_handle, uint32_t wait_time = 2, do_rx_post = false);
+int test_destroy_one_queue(uint64_t queue_handle, uint32_t wait_time = 2, bool do_rx_post = false);
 int test_queue_destory(test_urpc_ctx_t *ctx, uint32_t wait_time = 2);
 
-void test_urpc_handler_func(urpc_sge_t *args, uint32_t args_sge_num, coid *ctx, urpc_sge_t **rsps, uint32_t *rsps_sge_num);
+void test_urpc_handler_func(urpc_sge_t *args, uint32_t args_sge_num, void *ctx, urpc_sge_t **rsps, uint32_t *rsps_sge_num);
 int test_func_register(test_urpc_ctx_t *ctx);
 int test_func_unregister(test_urpc_ctx_t *ctx);
 
@@ -338,9 +338,9 @@ int test_async_event_get(urpc_async_event_type_t type, size_t wait_time_ms = 300
 urpc_channel_connect_option_t get_channel_connect_option(bool set_ctrl_msg = false, int timeout = -1);
 int test_channel_server_attach(test_urpc_ctx_t *ctx, uint32_t urpc_chid, urpc_host_info_t *host, urpc_channel_connect_option_t *option = nullptr, size_t wait_time = 3000);
 int test_channel_server_detach(test_urpc_ctx_t *ctx, uint32_t urpc_chid, urpc_host_info_t *host, urpc_channel_connect_option_t *option = nullptr, size_t wait_time = 3000);
-int test_channel_server_refresh(test_urpc_ctx_t *ctx, uint32_t urpc_chid, urpc_host_info_t *host, urpc_channel_connect_option_t *option = nullptr, size_t wait_time = 3000);
-int test_channel_queue_add(uint32_t channel_id, uint64_t queue_handle, bool is_remote = false, urpc_channel_connect_option_t *option = nullptr, size_t wait_time = 30000);
-int test_channel_queue_rm(uint32_t channel_id, uint64_t queue_handle, bool is_remote = false, urpc_channel_connect_option_t *option = nullptr, size_t wait_time = 30000);
+int test_channel_server_refresh(test_urpc_ctx_t *ctx, uint32_t urpc_chid, urpc_channel_connect_option_t *option = nullptr, size_t wait_time = 3000);
+int test_channel_queue_add(uint32_t channel_id, uint64_t queue_handle, bool is_remote = false, urpc_channel_connect_option_t *option = nullptr, size_t wait_time = 3000);
+int test_channel_queue_rm(uint32_t channel_id, uint64_t queue_handle, bool is_remote = false, urpc_channel_connect_option_t *option = nullptr, size_t wait_time = 3000);
 
 int test_server_attach(test_urpc_ctx_t *ctx, urpc_channel_connect_option_t *connect_option = nullptr);
 int test_server_detach(test_urpc_ctx_t *ctx, urpc_channel_connect_option_t *connect_option = nullptr);
@@ -361,12 +361,12 @@ int test_channel_get_server_queue(channel_ops_t *channel_ops);
 
 int test_channel_queue_pair(test_urpc_ctx_t *ctx, uint32_t urpc_chid, uint64_t l_queue, uint64_t r_queue, urpc_channel_connect_option_t *option = nullptr, size_t wait_time = 3000);
 int test_channel_queue_unpair(test_urpc_ctx_t *ctx, uint32_t urpc_chid, uint64_t l_queue, uint64_t r_queue, urpc_channel_connect_option_t *option = nullptr, size_t wait_time = 3000);
-int test_normal_queue_pair(test_urpc_ctx_t *ctx, uint32_t urpc_chid = URPC_U32_FAIL, urpc_channel_connect_option_t *option = nullptr, size_t wait_time = 3000);
-int test_normal_queue_unpair(test_urpc_ctx_t *ctx, uint32_t urpc_chid = URPC_U32_FAIL, urpc_channel_connect_option_t *option = nullptr, size_t wait_time = 3000);
+int test_normal_queue_pair(test_urpc_ctx_t *ctx, uint32_t channel_id = URPC_U32_FAIL, urpc_channel_connect_option_t *option = nullptr, size_t wait_time = 3000);
+int test_normal_queue_unpair(test_urpc_ctx_t *ctx, uint32_t channel_id = URPC_U32_FAIL, urpc_channel_connect_option_t *option = nullptr, size_t wait_time = 3000);
 
 int test_channel_queue_add_attach(test_urpc_ctx_t *ctx);
 
-void test_log_file_close(logfile_info_t **log_file_info = &g_test_log_file);
+void test_log_file_close(log_file_info_t **log_file_info = &g_test_log_file);
 
 unsigned int test_client_psk_cb_func(void *ssl, const char *hint, char *identity, unsigned int max_identity_len, unsigned char *psk, unsigned int max_psk_len);
 unsigned int test_server_psk_cb_func(void *ssl, char *identity, unsigned char *psk, unsigned int max_psk_len);
@@ -375,15 +375,15 @@ int test_server_prepare(test_urpc_ctx_t *ctx, urpc_config_t *cfg = nullptr, urpc
 int test_client_prepare(test_urpc_ctx_t *ctx, urpc_config_t *cfg = nullptr, urpc_queue_trans_mode_t queue_trans_mode = QUEUE_TRANS_MODE_JETTY);
 int test_server_client_prepare(test_urpc_ctx_t *ctx, urpc_config_t *cfg = nullptr, urpc_queue_trans_mode_t queue_trans_mode = QUEUE_TRANS_MODE_JETTY);
 
-int test_server_ctx_uninit(test_urpc_ctx_t *ctx uint32_t wait_time = 2);
-int test_client_ctx_uninit(test_urpc_ctx_t *ctx uint32_t wait_time = 2);
-int test_server_client_ctx_uninit(test_urpc_ctx_t *ctx uint32_t wait_time = 2);
+int test_server_ctx_uninit(test_urpc_ctx_t *ctx, uint32_t wait_time = 2);
+int test_client_ctx_uninit(test_urpc_ctx_t *ctx, uint32_t wait_time = 2);
+int test_server_client_ctx_uninit(test_urpc_ctx_t *ctx, uint32_t wait_time = 2);
 
 const char *parse_poll_event(uint32_t event);
-void handle_poll_event_recved(urpc_poll_msg_t *msg, uint64_t queue_handle, uint32_t *hit_events = nullptr);
+void handle_poll_event_req_recved(urpc_poll_msg_t *msg, uint64_t queue_handle, uint32_t *hit_events = nullptr);
 void handle_poll_event_rsp_sended(urpc_poll_msg_t *msg, uint32_t *hit_events = nullptr);
 void handle_poll_event_req_acked(urpc_poll_msg_t *msg, uint32_t *hit_events = nullptr);
-void handle_poll_event_rsp_rsped(urpc_poll_msg_t *msg, uint32_t *hit_events = nullptr);
+void handle_poll_event_req_rsped(urpc_poll_msg_t *msg, uint32_t *hit_events = nullptr);
 void handle_poll_event_req_acked_rsped(urpc_poll_msg_t *msg, uint32_t *hit_events = nullptr);
 void handle_poll_event_rsp_err(urpc_poll_msg_t *msg, uint32_t *hit_events = nullptr);
 void handle_poll_event_req_err(urpc_poll_msg_t *msg, uint32_t *hit_events = nullptr);
@@ -396,24 +396,25 @@ void test_func_poll_all_queue(poll_thread_args_t *poll_args);
 int start_poll_event_thread(int thread_num, poll_thread_args_t pargs[]);
 void stop_poll_event_thread(int thread_num, poll_thread_args_t pargs[], uint32_t wait_time = 2);
 
-void server_handle_poll_event(urpc_poll_msg_t *msg, int poll_num, uint64_t queue_handle);
+void server_handle_poll_event(urpc_poll_msg_t *msgs, int poll_num, uint64_t queue_handle);
 void set_server_exit_status(bool status);
 int start_server_poll_thread(int thread_num, server_thread_arg_t targ[]);
 int stop_server_poll_thread(int thread_num, server_thread_arg_t targ[]);
-int test_server_run_resonese(test_func_args_t *func_args);
+int test_server_run_response(test_func_args_t *func_args);
 
-uint32_t client_handle_poll_event(urpc_poll_msg_t *msg, int poll_num, uint32_t *hit_events, uint64_t queue_handle = 0);
+uint32_t client_handle_poll_event(urpc_poll_msg_t *msgs, int poll_num, uint32_t *hit_events, uint64_t queue_handle = 0);
 int test_client_process_event(test_func_args_t *func_args);
 void set_call_option_queue_handle(test_func_args_t *func_args, urpc_call_option_t *option);
 void set_call_option_flag_rsp(urpc_call_option_t *option);
 void set_call_option_flag_no_ack_rsp(urpc_call_option_t *option);
 void set_func_args_hit_events_rsp(test_func_args_t *func_args);
 void set_func_args_hit_events_no_ack_rsp(test_func_args_t *func_args);
-void test_client_process_normal_call(test_func_args_t *func_args);
-void test_client_run(test_func_args_t *func_args);
-void test_func_call_read_custom(test_func_args_t *func_args);
-void test_func_call_recv_rsp_no_ack(test_func_args_t *func_args);
-void test_func_call_no_rsp_no_ack(test_func_args_t *func_args);
+int test_client_process_normal_call(test_func_args_t *func_args);
+int test_client_process_call(test_func_args_t *func_args);
+int test_client_run(test_func_args_t *func_args);
+int test_func_call_read_custom(test_func_args_t *func_args);
+int test_func_call_recv_rsp_no_ack(test_func_args_t *func_args);
+int test_func_call_no_rsp_no_ack(test_func_args_t *func_args);
 uint64_t create_original_queue(urpc_queue_trans_mode_t trans_mode = QUEUE_TRANS_MODE_JETTY);
 uint64_t create_share_rq_queue(uint64_t share_rq_handle, urpc_queue_trans_mode_t trans_mode = QUEUE_TRANS_MODE_JETTY);
 urpc_qcfg_get_t print_queue_cfg(uint64_t queue_handle);

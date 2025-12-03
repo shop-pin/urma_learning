@@ -16,6 +16,10 @@
 #include "umq_qbuf_pool.h"
 #include "util_id_generator.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define MEMPOOL_UBVA_SIZE 28
 #define UMQ_IMM_VERSION 0
 
@@ -136,5 +140,11 @@ int umq_ub_async_event_get(umq_trans_info_t *trans_info, umq_async_event_t *even
 void umq_ub_async_event_ack(umq_async_event_t *event);
 int umq_ub_dev_add_impl(umq_trans_info_t *info, umq_init_cfg_t *cfg);
 int umq_ub_get_route_list_impl(const umq_route_t *route, umq_route_list_t *route_list);
+
+int umq_ub_user_ctl_impl(uint64_t umqh_tp, umq_user_ctl_in_t *in, umq_user_ctl_out_t *out);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

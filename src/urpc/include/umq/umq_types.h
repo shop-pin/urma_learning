@@ -252,8 +252,7 @@ struct umq_buf {
 
     uint64_t status : 32;                 // umq_buf_status_t
     uint64_t io_direction : 2;            // 0: no direction; 1: tx qbuf; 2: rx qbuf
-    uint64_t need_import : 1;
-    uint64_t rsvd3 : 29;
+    uint64_t rsvd3 : 30;
 
     uint64_t rsvd4;
 
@@ -271,6 +270,18 @@ typedef struct umq_alloc_option {
     uint32_t flag;                          // indicates which below property takes effect
     uint16_t headroom_size;
 } umq_alloc_option_t;
+
+typedef struct umq_flowcontrol_stats {
+    uint64_t local_rx_posted;
+    uint64_t remote_rx_window;
+    uint64_t total_local_rx_posted;
+    uint64_t total_local_rx_notified;
+    uint64_t total_local_rx_posted_error;
+    uint64_t total_remote_rx_received;
+    uint64_t total_remote_rx_consumed;
+    uint64_t total_remote_rx_received_error;
+    uint64_t total_flow_controlled_wr;
+} umq_flowcontrol_stats_t;
 
 typedef enum umq_dfx_module_id {
     UMQ_DFX_MODULE_PERF,
@@ -302,7 +313,7 @@ typedef enum umq_stats_type {
 } umq_stats_type_t;
 
 typedef enum umq_err_stats_type {
-    UMQ_ERR_STATS_TYPE_POST_PARM_INVALID,                   // post parameter invalid cnt
+    UMQ_ERR_STATS_TYPE_POST_PARAM_INVALID,                  // post parameter invalid cnt
     UMQ_ERR_STATS_TYPE_POST_SEND,                           // post send cnt
     UMQ_ERR_STATS_TYPE_POST_RECV,                           // post recv cnt
     UMQ_ERR_STATS_TYPE_POST_IO_DIRECTION_INVALID,           // post io direction invalid cnt
@@ -312,7 +323,7 @@ typedef enum umq_err_stats_type {
 
     UMQ_ERR_STATS_TYPE_POST_BIG_DATA,                       // post send big data cnt
 
-    UMQ_ERR_STATS_TYPE_POLL_PARM_INVALID,                   // poll cnt
+    UMQ_ERR_STATS_TYPE_POLL_PARAM_INVALID,                  // poll cnt
     UMQ_ERR_STATS_TYPE_POLL_TX,                             // poll tx failed
     UMQ_ERR_STATS_TYPE_POLL_RX,                             // poll rx failed
     UMQ_ERR_STATS_TYPE_POLL_IO_DIRECTION_INVALID,           // poll io direction invalid cnt
@@ -321,12 +332,12 @@ typedef enum umq_err_stats_type {
     UMQ_ERR_STATS_TYPE_READ_BIND_CTX_INVALID,               // read bind ctx invalid cnt
     UMQ_ERR_STATS_TYPE_READ_TSEG_INVALID,                   // read tseg invalid cnt
 
-    UMQ_ERR_STATS_TYPE_ENQUEUE_PARM_INVALID,                // enqueue parameter invalid cnt
+    UMQ_ERR_STATS_TYPE_ENQUEUE_PARAM_INVALID,               // enqueue parameter invalid cnt
     UMQ_ERR_STATS_TYPE_ENQUEUE_DATA_NUM_INVALID,            // enqueue data num invalid cnt
     UMQ_ERR_STATS_TYPE_ENQUEUE_POST_TX_BATCH,               // enqueue post tx batch failed
     UMQ_ERR_STATS_TYPE_ENQUEUE_SGE_NUM_INVALID,             // enqueue sge num invalid cnt
 
-    UMQ_ERR_STATS_TYPE_DEQUEUE_PARM_INVALID,                // dequeue parameter invalid cnt
+    UMQ_ERR_STATS_TYPE_DEQUEUE_PARAM_INVALID,               // dequeue parameter invalid cnt
     UMQ_ERR_STATS_TYPE_DEQUEUE_BIND_CTX_INVALID,            // dequeue bind ctx invalid cnt
     UMQ_ERR_STATS_TYPE_DEQUEUE_SHM_QBUF,                    // dequeue shm qbuf cnt
 
@@ -407,11 +418,11 @@ typedef struct umq_perf_record {
     bool is_used;
 } umq_perf_record_t;
 
-typedef struct perf_in_parm {
+typedef struct perf_in_param {
     // Record data within the specified interval
     uint64_t thresh_array[UMQ_PERF_QUANTILE_MAX_NUM];
     uint32_t thresh_num;
-} perf_in_parm_t;
+} perf_in_param_t;
 
 typedef struct umq_perf_infos {
     uint32_t perf_record_num;
@@ -425,7 +436,7 @@ typedef struct umq_dfx_cmd {
         umq_stats_cmd_id_t stats_cmd_id;
     };
     union {
-        perf_in_parm_t perf_in_parm;
+        perf_in_param_t perf_in_param;
     };
 } umq_dfx_cmd_t;
 
@@ -438,8 +449,8 @@ typedef struct umq_dfx_result {
     int err_code;
     union {
         char *perf_char;
-        umq_perf_infos_t *perf_out_parm;
-        umq_stats_infos_t *stats_out_parm;
+        umq_perf_infos_t *perf_out_param;
+        umq_stats_infos_t *stats_out_param;
     };
 } umq_dfx_result_t;
 
@@ -470,10 +481,10 @@ typedef struct umq_async_event {
 
 typedef union umq_route_flag {
     struct {
-        uint32_t rtp: 1;
-        uint32_t ctp: 1;
-        uint32_t utp: 1;
-        uint32_t reserved: 29;
+        uint32_t rtp : 1;
+        uint32_t ctp : 1;
+        uint32_t utp : 1;
+        uint32_t reserved : 29;
     } bs;
     uint32_t value;
 } umq_route_flag_t;
@@ -482,12 +493,31 @@ typedef struct umq_route {
     umq_eid_t src;
     umq_eid_t dst;
     umq_route_flag_t flag;
+    uint32_t hops; // Only supports direct routes, currently 0
 } umq_route_t;
 
 typedef struct umq_route_list {
     uint32_t len;
     umq_route_t buf[UMQ_MAX_ROUTES];
 } umq_route_list_t;
+
+typedef enum umq_user_ctl_opcode {
+    UMQ_OPCODE_FLOW_CONTROL_STATS_QUERY = 0,
+
+    UMQ_OPCODE_MAX,
+} umq_user_ctl_opcode_t;
+
+typedef struct umq_user_ctl_in {
+    uint64_t addr;                  // the address of the input parameter buffer
+    uint32_t len;                   // the length of the input parameter buffer
+    uint32_t opcode;                // opcode for user ctl
+} umq_user_ctl_in_t;
+
+typedef struct umq_user_ctl_out {
+    uint64_t addr;                  // the address of the output parameter buffer
+    uint32_t len;                   // the length of the output parameter buffer
+    uint32_t reserved;
+} umq_user_ctl_out_t;
 
 #ifdef __cplusplus
 }
