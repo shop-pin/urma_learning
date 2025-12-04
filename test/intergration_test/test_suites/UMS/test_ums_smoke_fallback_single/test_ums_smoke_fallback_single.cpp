@@ -18,17 +18,19 @@ static int run_test()
     int rc = TEST_FAILED;
     if (ctx->app_id == PROC_2) {
         char serv_cmd[MAX_EXEC_CMD_RET_LEN];
-        exec_cmd(serv_cmd, MAX_EXEC_CMD_RET_LEN, "nohup qperf -lp ${i} &");
+        exec_cmd(serv_cmd, MAX_EXEC_CMD_RET_LEN, "nohup qperf -lp %d &", g_test_ums_ctx.test_port,);
     }
     sync_time("----------------------------1");
     if (ctx->app_id == PROC_1) {
         char clnt_cmd[MAX_EXEC_CMD_RET_LEN];
-        exec_cmd(clnt_cmd, MAX_EXEC_CMD_RET_LEN, "nohup ums_run qperf %s -lp ${i} -m 8192 -t 0 tcp_bw 2>&1 &", serv_ip);
+        exec_cmd(clnt_cmd, MAX_EXEC_CMD_RET_LEN, "nohup ums_run qperf %s -lp %d -m 8192 -t 0 tcp_bw 2>&1 &", g_test_ums_ctx.server_ip, g_test_ums_ctx.test_port);
     }
     sync_time("----------------------------2");
     
     // 校验流量走ums
-    int check_num = query_proc_net_ums_detail_stram_num("False", servr_ip);
+    char port_str[10]={0};
+    sprintf(port_str, "%d", g_test_ums_ctx.test_port);
+    int check_num = query_proc_net_ums_detail_stram_num("False", port_str);
     if (ctx->app_id == PROC_1 && check_num != 2) {
         ret = -1;
     }
