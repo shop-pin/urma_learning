@@ -16,20 +16,20 @@ static int run_test()
     int rc = TEST_FAILED;
     if (ctx->app_id == PROC_2) {
         char buf0[MAX_EXEC_CMD_RET_LEN];
-        exec_cmd(buf0, MAX_EXEC_CMD_RET_LEN, "nohup ums_run qperf -lp 4549 &");
+        exec_cmd(buf0, MAX_EXEC_CMD_RET_LEN, "nohup ums_run qperf -lp %d &", g_test_ums_ctx.test_port);
         char buf1[MAX_EXEC_CMD_RET_LEN];
-        exec_cmd(buf1, MAX_EXEC_CMD_RET_LEN, "nohup qperf -lp 4549 &");
+        exec_cmd(buf1, MAX_EXEC_CMD_RET_LEN, "nohup qperf -lp %d &", g_test_ums_ctx.test_port);
     }
     sync_time("----------------------------1");
     if (ctx->app_id == PROC_1) {
         char buf2[MAX_EXEC_CMD_RET_LEN];
-        exec_cmd(buf2, MAX_EXEC_CMD_RET_LEN, "nohup ums_run qperf %s -lp 4549 -t 0 -m 8192 tcp_lat &", server_ip);
+        exec_cmd(buf2, MAX_EXEC_CMD_RET_LEN, "nohup ums_run qperf %s -lp %d -t 0 -m 8192 tcp_lat &", g_test_ums_ctx.server_ip, g_test_ums_ctx.test_port);
         char buf3[MAX_EXEC_CMD_RET_LEN];
-        exec_cmd(buf3, "nohup ums_run qperf %s -lp 4550 -t 0 -m 8192 tcp_lat &", server_ip);
+        exec_cmd(buf3, "nohup ums_run qperf %s -lp %d -t 0 -m 8192 tcp_lat &", g_test_ums_ctx.server_ip, g_test_ums_ctx.test_port);
     }
     sync_time("----------------------------2");
     char server_ip_str[10]={0};
-    sprintf(server_ip_str, "%d", server_ip);
+    sprintf(server_ip_str, "%d", g_test_ums_ctx.server_ip);
     int check_num_ums = query_proc_net_ums_detail_stram_num("False", server_ip_str);
     if (ctx->app_id == PROC_1 && check_num_ums != 2) {
         ret = -1;

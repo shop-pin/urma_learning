@@ -23,8 +23,6 @@ def prepare_test_case(host_list, case_path):
     _cmd = f'cd {local_path};' \
            f'gcc ums_atom.cpp {case_path}/test_case.cpp ../common/test_log.c ../common/common.c  ../common/test_thread_pool.c {case_path}/../public.cpp -g '\
            f'-rdynamic -lstdc++  -w -O0 -fPIC  -fpermissive -o {case_path}/test_case'
-    lib_list = [' -lpthread', '-lumss', '-lumsc', '-lumsm', '-ldl', f'-I {local_path}', '-I /usr/include/ub/umdk/ulock/ums/', f'-I {common_path}']
-    _cmd += " ".join(lib_list)
 
     p_list = []
     for host in host_list:
@@ -72,6 +70,7 @@ def exec_test_case(host_list, path, server_num=1, client_num=1, random_host=True
     case_path = kwargs.get("case_path", "''")
     timeout = kwargs.get("timeout", 1800)
     test_port = kwargs.get("test_port", _test_port)
+    ip_addrs = kwargs.get("ip_addrs", None)
 
     p_list = []
     test_host = []
@@ -82,16 +81,14 @@ def exec_test_case(host_list, path, server_num=1, client_num=1, random_host=True
     _test_ip = f'-i {test_host[0].test_nic1_ip},{test_host[-1].test_nic1_ip}' \
                f' -I {test_host[0].test_nic1_ip},{test_host[-1].test_nic1_ip}'
     
-    test_dev = get_test_dev(test_host, 0)
     log.info(f'--------start app{1} server--------')
-    _cmd = f'{path}/test_case -a {app_num}:{1}:{tcp_port} -d {test_dev} '\
-           f'-p {test_port} {_test_ip}  -x {case_path}'
+    _cmd = f'{path}/test_case -a {app_num}:{1}:{tcp_port} -p {test_port} {_test_ip}' \
+           f'  -x {case_path}'
     p_list.append(test_host[0].exec_cmd(_cmd, background=True, timeout=timeout, port=test_port))
 
     log.info(f'--------start app{2} client--------')
-    test_dev = get_test_dev(test_host, 1)
-    _cmd = f'{path}/test_case -a {app_num}:{2}:{tcp_port} -d {test_dev} '\
-           f'-p {test_port} {_test_ip} -x {case_path}'
+    _cmd = f'{path}/test_case -a {app_num}:{2}:{tcp_port} -p {test_port} {_test_ip}' \
+           f'-x {case_path}'
     p_list.append(test_host[1].exec_cmd(_cmd, background=True, timeout=timeout, port=test_port))
 
     if check is True:

@@ -21,6 +21,7 @@ test_ums_ctx_t *test_ums_ctx_init(int argc, char *argv[], int thread_num)
     g_test_ums_ctx.app_id = ctx->app_id;
     g_test_ums_ctx.app_num = ctx->app_num;
     g_test_ums_ctx.test_port = ctx->test_port;
+    g_test_ums_ctx.server_ip = ctx->server_ip;
     g_test_ums_ctx.trans_mode = static_cast<trans_mode_t>(ctx->mode);
     if (ctx->mode == 0) {
         TEST_LOG_INFO("test_case trans_mode_t=%d is SEPERATE_CONN\n", ctx->mode);

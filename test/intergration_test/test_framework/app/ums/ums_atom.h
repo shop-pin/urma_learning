@@ -19,14 +19,18 @@ using namespace ums;
 #define UMS_IPV4_MAP_IPV6_PREFIX (0x0000ffff)
 #define UMS_EID_STR_MIN_LEN 3
 #define UMS_MAX_EXPIRE_TIMEOUT 20
+#define UMS_IPV4_SIZE                (16)
+#define UMS_IPV6_SIZE                (46)
 
 typedef struct {
     test_context_t *ctx;
     trans_mode_t trans_mode;
+    ums_server_info_t *server_info;
     uint32_t app_num;
     uint32_t app_id;
     uint64_t pid;
     uint64_t test_port;
+    char *server_ip;
     int server_id;
     bool ssl_enable;
     int log_level;
