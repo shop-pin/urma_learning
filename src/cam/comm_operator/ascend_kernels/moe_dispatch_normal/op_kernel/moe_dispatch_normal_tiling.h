@@ -7,8 +7,8 @@
  * History: 2025-11-28 create normal dispatch tiling header file
  */
 
-#ifndef CAM_MOE_DISPATCH_NORMAL_TILING_H
-#define CAM_MOE_DISPATCH_NORMAL_TILING_H
+#ifndef MOE_DISPATCH_NORMAL_TILING_H
+#define MOE_DISPATCH_NORMAL_TILING_H
 
 struct CamMoeDispatchNormalInfo {
     uint32_t epWorldSize;   // epWorldSize
@@ -23,7 +23,6 @@ struct CamMoeDispatchNormalInfo {
     uint32_t h;             // h
     uint32_t aivNum;        // aivNum
     bool isQuant;           // whether quant or not
-    bool isEnableDiagnose;  // whether enable diagnose or not
     bool reserved2;         // reserved
     bool reserved3;         // reserved
     uint64_t totalUbSize;   // epWorldSize

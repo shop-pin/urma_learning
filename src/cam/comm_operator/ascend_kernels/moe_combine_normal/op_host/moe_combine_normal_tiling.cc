@@ -27,13 +27,12 @@
 #include "error_log.h"
 #include "graph/utils/type_utils.h"
 #include "register/op_def_registry.h"
-#include "mc2_tiling_utils.h"
-#include "../op_kernel/cam_moe_combine_normal_tiling.h"
-#include "tiling_args.h"
+#include "../op_kernel/moe_combine_normal_tiling.h"
 
 using namespace AscendC;
 using namespace ge;
-using namespace Moe;
+
+#define HCCL_BUFFERSIZE "HCCL_BUFFERSIZE"
 
 namespace {
 constexpr uint32_t RECV_X_INDEX = 0;
@@ -77,6 +76,8 @@ constexpr uint64_t SCALE_RECV_IDX_BUFFER = 44UL;  // scale32B + 3*4 src info
 constexpr uint64_t DOUBLE_DATA_BUFFER = 2UL;
 constexpr uint64_t MAX_OUT_DTYPE_SIZE = 2UL;
 constexpr uint64_t UB_ALIGN = 32UL;
+constexpr uint64_t COMBINE_STATE_WIN_OFFSET = 3U * 1024UL * 1024UL;
+constexpr uint64_t NOTIFY_DISPATCH_WIN_OFFSET = 204U *1024UL * 1024UL;
 constexpr int64_t DISPATCH_STATUS_MAX_SUPPORT_NUM = 1280UL;
 
 enum class CommQuantMode : int32_t { NON_QUANT = 0, INT12_QUANT = 1, INT8_QUANT = 2 };
@@ -84,6 +85,25 @@ using CommQuantModeType = std::underlying_type<CommQuantMode>;
 }  // namespace
 
 namespace optiling {
+
+static uint64_t GetMaxWindowSize()
+{
+    uint16_t defaultWindowSize = 200;
+    if(getenv(HCCL_BUFFERSIZE) == nullptr) {
+        OP_LOGD("", "Env HCCL_BUFFERSIZE don't set.");
+    } else {
+        try {
+            std::string envStr(getenv(HCCL_BUFFERSIZE));
+            defaultWindowSize = std::stoi(envStr);
+        } catch(...) {
+            OP_LOGE("", "Unknown exception encountered when parser env HCCL_BUFFERSIZE.");
+        }
+    }
+    const uint64_t maxWindowSize = static_cast<uint64_t>(defaultWindowSize) * 1024UL *1024UL;
+    OP_LOGI("", "Get max window size is %lu", maxWindowSize);
+
+    return maxWindowSize;
+}
 
 // a3专有
 static void PrintTilingDataInfo(const char *nodeName, CamMoeCombineNormalTilingData &tilingData)
@@ -227,7 +247,7 @@ static bool CheckOptionalInputTensorDim(gert::TilingContext *context, const char
     return true;
 }
 
-static bool CheckOutputTensorDim(gert::TilingContext *context, const char *nodeName, const bool isEnableDiagnose)
+static bool CheckOutputTensorDim(gert::TilingContext *context, const char *nodeName)
 {
     const gert::StorageShape *xStorageShape = context->GetOutputShape(OUTPUT_X_INDEX);
     OP_TILING_CHECK(xStorageShape == nullptr, OP_LOGE(nodeName, "x is null."), return false);
@@ -238,19 +258,10 @@ static bool CheckOutputTensorDim(gert::TilingContext *context, const char *nodeN
     OP_LOGD(nodeName, "x dim0 = %ld", xStorageShape->GetStorageShape().GetDim(0));
     OP_LOGD(nodeName, "x dim1 = %ld", xStorageShape->GetStorageShape().GetDim(1));
 
-    if (isEnableDiagnose) {
-        const gert::StorageShape *sendCostStatsStorageShape = context->GetOutputShape(OUTPUT_SEND_COST_INDEX);
-        OP_TILING_CHECK(sendCostStatsStorageShape == nullptr, OP_LOGE(nodeName, "combine sendCostStatsShape is null."),
-                        return false);
-        OP_TILING_CHECK(sendCostStatsStorageShape->GetStorageShape().GetDimNum() != ONE_DIM,
-                        OP_LOGE(nodeName, "combine sendCostStatsShape must be 1-dimension, but got %lu dim",
-                                sendCostStatsStorageShape->GetStorageShape().GetDimNum()),
-                        return false);
-    }
     return true;
 }
 
-static bool CheckTensorDim(gert::TilingContext *context, const char *nodeName, const bool isEnableDiagnose)
+static bool CheckTensorDim(gert::TilingContext *context, const char *nodeName)
 {
     OP_TILING_CHECK(!CheckInputTensorDim(context, nodeName),
                     OP_LOGE(nodeName, "param shape of input tensor is invalid"), return false);
@@ -258,14 +269,14 @@ static bool CheckTensorDim(gert::TilingContext *context, const char *nodeName, c
     OP_TILING_CHECK(!CheckOptionalInputTensorDim(context, nodeName),
                     OP_LOGE(nodeName, "param shape of optional input tensor is invalid"), return false);
 
-    OP_TILING_CHECK(!CheckOutputTensorDim(context, nodeName, isEnableDiagnose),
+    OP_TILING_CHECK(!CheckOutputTensorDim(context, nodeName),
                     OP_LOGE(nodeName, "param shape of output tensor is invalid"), return false);
 
     return true;
 }
 
 // 校验数据类型
-static bool CheckTensorDataType(gert::TilingContext *context, const char *nodeName, const bool isEnableDiagnose)
+static bool CheckTensorDataType(gert::TilingContext *context, const char *nodeName)
 {
     auto recvXDesc = context->GetInputDesc(RECV_X_INDEX);
     OP_TILING_CHECK(recvXDesc == nullptr, OP_LOGE(nodeName, "recvXDesc is null."), return false);
@@ -295,19 +306,10 @@ static bool CheckTensorDataType(gert::TilingContext *context, const char *nodeNa
                     OP_LOGE(nodeName, "x dataType is invalid, dataType should be equal to recvX dataType , but is "),
                     return false);
 
-    if (isEnableDiagnose) {
-        auto sendCostStatsDesc = context->GetOutputDesc(OUTPUT_SEND_COST_INDEX);
-        OP_TILING_CHECK(sendCostStatsDesc == nullptr, OP_LOGE(nodeName, "combine sendCostStatsDesc is null."),
-                        return false);
-        OP_TILING_CHECK(
-            sendCostStatsDesc->GetDataType() != ge::DT_INT32,
-            OP_LOGE(nodeName, "combine sendCostStatsDesc dataType is invalid, dataType should be int32, but is ."),
-            return false);
-    }
     return true;
 }
 
-static bool CheckTensorFormat(gert::TilingContext *context, const char *nodeName, const bool isEnableDiagnose)
+static bool CheckTensorFormat(gert::TilingContext *context, const char *nodeName)
 {
     auto recvXDesc = context->GetInputDesc(RECV_X_INDEX);
     OP_TILING_CHECK(recvXDesc == nullptr, OP_LOGE(nodeName, "recvXDesc is null."), return false);
@@ -338,14 +340,6 @@ static bool CheckTensorFormat(gert::TilingContext *context, const char *nodeName
     OP_TILING_CHECK(static_cast<ge::Format>(ge::GetPrimaryFormat(xDesc->GetStorageFormat())) == ge::FORMAT_FRACTAL_NZ,
                     OP_LOGE(nodeName, "xFormat is invalid"), return false);
 
-    if (isEnableDiagnose) {
-        auto sendCostStatsDesc = context->GetOutputDesc(OUTPUT_SEND_COST_INDEX);
-        OP_TILING_CHECK(sendCostStatsDesc == nullptr, OP_LOGE(nodeName, "combine sendCostStatsDesc is null."),
-                        return false);
-        OP_TILING_CHECK(static_cast<ge::Format>(ge::GetPrimaryFormat(sendCostStatsDesc->GetStorageFormat())) ==
-                            ge::FORMAT_FRACTAL_NZ,
-                        OP_LOGE(nodeName, "combine sendCostStatsDesc format is invalid"), return false);
-    }
     return true;
 }
 
@@ -451,17 +445,16 @@ static bool CheckAttrs(gert::TilingContext *context, CamMoeCombineNormalTilingDa
     return true;
 }
 
-static ge::graphStatus TilingCheckCamMoeCombineNormal(gert::TilingContext *context, const char *nodeName,
-                                                      const bool isEnableDiagnose)
+static ge::graphStatus TilingCheckCamMoeCombineNormal(gert::TilingContext *context, const char *nodeName)
 {
     // 检查参数shape信息
-    OP_TILING_CHECK(!CheckTensorDim(context, nodeName, isEnableDiagnose), OP_LOGE(nodeName, "param shape is invalid"),
+    OP_TILING_CHECK(!CheckTensorDim(context, nodeName), OP_LOGE(nodeName, "param shape is invalid"),
                     return ge::GRAPH_FAILED);
     // 检查参数dataType信息
-    OP_TILING_CHECK(!CheckTensorDataType(context, nodeName, isEnableDiagnose),
+    OP_TILING_CHECK(!CheckTensorDataType(context, nodeName),
                     OP_LOGE(nodeName, "param dataType is invalid"), return ge::GRAPH_FAILED);
     // 检查参数format信息
-    OP_TILING_CHECK(!CheckTensorFormat(context, nodeName, isEnableDiagnose),
+    OP_TILING_CHECK(!CheckTensorFormat(context, nodeName),
                     OP_LOGE(nodeName, "param Format is invalid"), return ge::GRAPH_FAILED);
     return ge::GRAPH_SUCCESS;
 }
@@ -511,10 +504,9 @@ static ge::graphStatus CamMoeCombineNormalA3TilingFuncImpl(gert::TilingContext *
                     OP_LOGE(nodeName, "Getting attr failed."), return ge::GRAPH_FAILED);
 
     auto sendCostStatsStorageShape = context->GetOutputShape(OUTPUT_SEND_COST_INDEX);
-    bool isEnableDiagnose = (sendCostStatsStorageShape != nullptr);
-    tilingData->camMoeCombineNormalInfo.isEnableDiagnose = isEnableDiagnose;
+
     // 检查输入输出的dim、format、dataType
-    OP_TILING_CHECK(TilingCheckCamMoeCombineNormal(context, nodeName, isEnableDiagnose) != ge::GRAPH_SUCCESS,
+    OP_TILING_CHECK(TilingCheckCamMoeCombineNormal(context, nodeName) != ge::GRAPH_SUCCESS,
                     OP_LOGE(nodeName, "Tiling check params failed"), return ge::GRAPH_FAILED);
 
     // 检查属性的取值是否合法
@@ -528,7 +520,7 @@ static ge::graphStatus CamMoeCombineNormalA3TilingFuncImpl(gert::TilingContext *
                     OP_LOGE(nodeName, "param dim check failed."), return ge::GRAPH_FAILED);
 
     // 校验win区大小
-    uint64_t maxWindowSize = Mc2TilingUtils::GetMaxWindowSize();
+    uint64_t maxWindowSize = GetMaxWindowSize();
     uint64_t h = static_cast<uint64_t>(tilingData->camMoeCombineNormalInfo.h);
     uint64_t epWorldSize = static_cast<uint64_t>(tilingData->camMoeCombineNormalInfo.epWorldSize);
     uint64_t k = static_cast<uint64_t>(tilingData->camMoeCombineNormalInfo.k);
@@ -595,7 +587,7 @@ ge::graphStatus TilingParseForCamMoeCombineNormal(gert::TilingParseContext *cont
     return ge::GRAPH_SUCCESS;
 }
 
-IMPL_OP_OPTILING(CamMoeCombineNormal)
+IMPL_OP_OPTILING(MoeCombineNormal)
     .Tiling(CamMoeCombineNormalTilingFunc)
     .TilingParse<CamMoeCombineNormalCompileInfo>(TilingParseForCamMoeCombineNormal);
 }  // namespace optiling

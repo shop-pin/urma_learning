@@ -7,8 +7,8 @@
  * History: 2025-11-28 create normal combine tiling header file
  */
 
-#ifndef CAM_MOE_COMBINE_NORMAL_TILING_H
-#define CAM_MOE_COMBINE_NORMAL_TILING_H
+#ifndef MOE_COMBINE_NORMAL_TILING_H
+#define MOE_COMBINE_NORMAL_TILING_H
 
 #include <cstdint>
 #include "kernel_tiling/kernel_tiling.h"
@@ -30,7 +30,6 @@ struct CamMoeCombineNormalInfo {
     uint64_t totalWinSize;
     float armAvgFactor;
     float epsilon;
-    bool isEnableDiagnose;
 };
 struct CamMoeCombineNormalTilingData {
     Mc2InitTiling mc2InitTiling;
@@ -39,4 +38,4 @@ struct CamMoeCombineNormalTilingData {
     CamMoeCombineNormalInfo camMoeCombineNormalInfo;
 };
 
-#endif  // CAM_MOE_COMBINE_NORMAL_TILING_H
+#endif  // MOE_COMBINE_NORMAL_TILING_H
