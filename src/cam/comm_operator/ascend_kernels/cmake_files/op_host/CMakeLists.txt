@@ -65,7 +65,7 @@ set_target_properties(cust_optiling PROPERTIES OUTPUT_NAME
     cust_opmaster_rt2.0
 )
 
-file(GLOB pregen_file "../pregen/aclnn/*")
+file(GLOB pregen_file "../pregen/build_out/autogen/*")
 file(COPY ${pregen_file} DESTINATION ${ASCEND_AUTOGEN_PATH})
 file(GLOB aclnn_src ${ASCEND_AUTOGEN_PATH}/aclnn*.cpp)
 file(GLOB aclnn_inc ${ASCEND_AUTOGEN_PATH}/aclnn_*.h)
