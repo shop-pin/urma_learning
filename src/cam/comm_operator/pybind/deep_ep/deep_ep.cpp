@@ -44,7 +44,6 @@ Buffer::intranode_dispatch(const at::Tensor &x, const std::optional<at::Tensor> 
     auto num_tokens = static_cast<int>(x.size(0)), hidden = static_cast<int>(x.size(1));
     auto num_experts = static_cast<int64_t>(num_tokens_per_expert->size(0));
     auto num_local_experts = static_cast<int>(num_experts / num_ranks);
-
     int num_topk = static_cast<int>(topk_idx->size(1));
 
     auto options_cpu = torch::TensorOptions().dtype(torch::kInt32).device(torch::kCPU);
@@ -91,7 +90,7 @@ Buffer::intranode_dispatch(const at::Tensor &x, const std::optional<at::Tensor> 
     }
 
     auto recv_count_cpu = recv_count.value().to(at::kCPU);
-    auto recv_data_ptr = recv_data_cpu.data_ptr<int>();
+    auto recv_count_ptr = recv_count_cpu.data_ptr<int>();
     std::vector<int> num_recv_tokens_per_expert_list;
 
     for (int i = 0; i < num_local_experts; ++i) {
