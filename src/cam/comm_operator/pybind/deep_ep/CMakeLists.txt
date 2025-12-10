@@ -3,7 +3,7 @@
 
 # this is the cmakelist file for deepep build
 # deepep will be built as separated wheel package
-project("DeepepCam)
+project("DeepepCam")
 cmake_minimum_required(VERSION 3.16)
 set(PROJECT_BUILD_PATH ${PROJECT_BINARY_DIR})
 set(TARGET_INSTALL_DIR ${CMAKE_INSTALL_PREFIX})
@@ -16,16 +16,16 @@ message(STATUS "PYTHON_EXECUTABLE:${PYTHON_EXECUTABLE}")
 execute_process(
     COMMAND ${PYTHON_EXECUTABLE} "-c"
     "from __future__ import print_function; import os; import pybind11;
-    print(os.path.dirname(pybind11.__file__),end='');"
+print(os.path.dirname(pybind11.__file__),end='');"
     RESULT_VARIABLE _PYTHON_SUCCESS
     OUTPUT_VARIABLE PYBIND11_DIR)
 
 if(NOT _PYTHON_SUCCESS MATCHES 0)
-    message(STATUS "PYBIND11_DIR: ${pybind11_dir}")
+    message(STATUS "PYBIND11_DIR: ${PYBIND11_DIR}")
     message(FATAL_ERROR "Pybind11 config Error.")
 endif()
 
-message(STATUS "PYBIND11_DIR: ${pybind11_dir}")
+message(STATUS "PYBIND11_DIR: ${PYBIND11_DIR}")
 list(APPEND CMAKE_PREFIX_PATH ${PYBIND11_DIR})
 find_package(pybind11 REQUIRED)
 
@@ -33,7 +33,7 @@ find_package(pybind11 REQUIRED)
 execute_process(
     COMMAND ${PYTHON_EXECUTABLE} "-c"
     "from __future__ import print_function; import os; import torch;
-    print(os.path.dirname(torch.__file__),end='');"
+print(os.path.dirname(torch.__file__),end='');"
     RESULT_VARIABLE _TORCH_SUCCESS
     OUTPUT_VARIABLE TORCH_DIR)
 
@@ -48,7 +48,7 @@ list(APPEND CMAKE_PREFIX_PATH ${TORCH_DIR})
 execute_process(
     COMMAND ${PYTHON_EXECUTABLE} "-c"
     "from __future__ import print_function; import os; import importlib.util;
-    print(os.path.dirname(importlib.util.find_spec('torch_npu').origin),end='');"
+print(os.path.dirname(importlib.util.find_spec('torch_npu').origin),end='');"
     RESULT_VARIABLE _TORCH_NPU_SUCCESS
     OUTPUT_VARIABLE TORCH_NPU_DIR)
 

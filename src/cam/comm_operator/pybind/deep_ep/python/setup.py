@@ -32,7 +32,7 @@ print(f'revision: {revision}')
 
 setuptools.setup(
     name="umdk_cam_operator_normal",
-    version=current_version + version_suffix,
+    version=current_version + revision,
     author="",
     author_email="",
     description="python api for deep_ep",

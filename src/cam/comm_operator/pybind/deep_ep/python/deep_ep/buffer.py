@@ -74,8 +74,6 @@ class Buffer:
                 will be empty.
             handle: the returned communication handle.
         """
-        # Default config
-        config = self.get_dispatch_config(self.group_size) if config is None else config
 
         # Launch the kernel with cached or non-cached mode
         if isinstance(x, tuple):

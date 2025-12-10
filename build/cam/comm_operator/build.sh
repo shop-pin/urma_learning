@@ -11,30 +11,12 @@ export MODULE_SRC_PATH="${SRC_PATH}/${MODULE_NAME}"
 export MODULE_SCRIPTS_PATH="${SCRIPTS_PATH}/${MODULE_NAME}"
 export MODULE_BUILD_OUT_PATH="${BUILD_OUT_PATH}/${MODULE_NAME}"
 export MODULE_TEST_PATH="${TEST_PATH}/${MODULE_NAME}"
+export MODULE_BUILD_PATH="${BUILD_PATH}/${MODULE_NAME}"
 IS_EXTRACT=0
 SOC_VERSION="all"
 ENABLE_UT_BUILD=0
-ENABLE_PYBIND_BUILD=0
+ENABLE_PYBIND_BUILD=1
 ENABLE_SRC_BUILD=1
-
-BuildPybind() {
-    DIST_OUT_PATH=$MODULE_BUILD_OUT_PATH
-    if [ -d $DIST_OUT_PATH/dist ]; then
-        rm -rf $DIST_OUT_PATH/dist
-    fi
-    EXT_PATH=$MODULE_SRC_PATH/pybind/ext
-    cd $EXT_PATH
-    sh build.sh
-    DIST_GEN_PATH=$EXT_PATH/dist/
-    if [ -d $DIST_GEN_PATH ]; then
-        echo "copy $DIST_GEN_PATH to $DIST_OUT_PATH/"
-        cp -rf $DIST_GEN_PATH $DIST_OUT_PATH/
-    else
-        echo $DIST_GEN_PATH does not exist
-        echo "BuildPybind fail"
-        return 1
-    fi
-}
 
 BuildTest() {
     cd ${MODULE_TEST_PATH}/ut_gtest
@@ -114,10 +96,7 @@ if [ $ENABLE_SRC_BUILD -eq 1 ]; then
 fi
 
 if [ $ENABLE_PYBIND_BUILD -eq 1 ]; then
-    BuildPybind
-    if [ $? -ne 0 ]; then
-        exit 1
-    fi
+    bash $MODULE_SCRIPTS_PATH/build_pybind.sh
 fi
 
 if [ $ENABLE_UT_BUILD -eq 1 ]; then
