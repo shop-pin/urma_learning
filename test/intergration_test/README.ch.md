@@ -26,42 +26,37 @@
 
 2. 环境yaml文件准备
 - yaml格式要求如下：
-- host1、host2代表2台测试环境
-- user、passed为登录环境的用户名、密码
-- manage_nic表示管理网卡
-- name、ip表示管理网卡的网卡名称、ip地址
-- test_nic1表示测试网卡
-- dev、name、ip、eid、mac分别表示测试网卡的设备名称、网卡名称、ip地址、eid信息、mac地址
-- arch为环境架构信息
+  - host1、host2代表2台测试环境
+  - user、passed为登录环境的用户名、密码
+  - manage_nic表示管理网卡
+  - name、ip表示管理网卡的网卡名称、ip地址
+  - test_nic1表示测试网卡
+  - name、ip、eid分别表示测试网卡的网卡设备名称、ip地址、eid信息
+
+- yaml文件路径：/etc/ubus_ci/test_env.yaml，2台host都需要存放
 
 ```yaml
-host_info:
-    host1:
-        user: root
-        passed: xxx
-        manage_nic:
-            name: xxx
-            ip: x.x.x.x
-        test_nic1:
-            dev: xxx
-            name: xxx
-            ip: x.x.x.x
-            eid: xxxx:xxxx:xxxx:xxxx:xxxx:xxxx:xxxx:xxxx
-            mac: xx:xx:xx:xx:xx:xx
-        arch: aarch64
-    host2:
-        user: root
-        passed: xxx
-        manage_nic:
-            name: xxx
-            ip: x.x.x.x
-        test_nic1:
-            dev: xxx
-            name: xxx
-            ip: x.x.x.x
-            eid: xxxx:xxxx:xxxx:xxxx:xxxx:xxxx:xxxx:xxxx
-            mac: xx:xx:xx:xx:xx:xx
-        arch: aarch64
+  host_info:
+      host1:
+          user: root
+          passed: xxx
+          manage_nic:
+              name: xxx
+              ip: x.x.x.x
+          test_nic1:
+              name: xxx
+              ip: x.x.x.x
+              eid: xxxx:xxxx:xxxx:xxxx:xxxx:xxxx:xxxx:xxxx
+      host2:
+          user: root
+          passed: xxx
+          manage_nic:
+              name: xxx
+              ip: x.x.x.x
+          test_nic1:
+              name: xxx
+              ip: x.x.x.x
+              eid: xxxx:xxxx:xxxx:xxxx:xxxx:xxxx:xxxx:xxxx
 ```
 
 #### 三、用例运行
