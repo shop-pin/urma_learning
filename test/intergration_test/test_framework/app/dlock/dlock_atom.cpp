@@ -135,8 +135,9 @@ int test_dlock_server_init(test_dlock_ctx_t *ctx)
     struct server_cfg cfg;
     memset(&cfg, 0, sizeof(cfg));
     get_default_server_config(ctx, &cfg);
-    char ctrl_cpuset[] = "10-12";
-    char cmd_cpuset[] = "10-12";
+    // 这里必须保证传入的cpu核在环境上存在 可以lscpu查看
+    char ctrl_cpuset[] = "0-2";
+    char cmd_cpuset[] = "0-2";
     cfg.primary.ctrl_cpuset = ctrl_cpuset;
     cfg.primary.cmd_cpuset = cmd_cpuset;
     sync_time("-------------------------- 0");
