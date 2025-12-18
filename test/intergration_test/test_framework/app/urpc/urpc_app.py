@@ -43,7 +43,7 @@ def prepare_test_case_urpc_lib(host_list, case_path, debug=False):
 
     _cmd = f'cd {local_path};' \
         f'g++ ../common/common.c ../common/test_log.c ../common/test_thread_pool.c ' \
-        f'urpc_lib_atom.cpp {case_cpp}'
+        f'urpc_lib_atom.cpp {case_cpp} '
     if os.path.exists(public_cpp):
         _cmd += f"{public_cpp} "
     _cmd += f"{afi_cmd} -o {case_out} "
