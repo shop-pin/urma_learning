@@ -1,3 +1,5 @@
+# 通知: 本项目已经正式迁移至 [AtomGit](https://atomgit.com/openeuler/umdk) 平台
+
 # UMDK
 #### 一、UMDK介绍
 灵衢内存语义开发包（UMDK）是一套以内存语义为核心的分布式通信软件库。
