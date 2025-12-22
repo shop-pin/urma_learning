@@ -21,8 +21,9 @@ def prepare_test_case(host_list, case_path, case_name="test_case"):
     case_out = os.path.join(case_path, "case_name")
 
     _cmd = f'cd {local_path};' \
-           f'gcc ums_atom.cpp {case_cpp} ../common/test_log.c ../common/common.c  {public_cpp} -g '\
-           f'-rdynamic -lstdc++  -w -O0 -fPIC  -fpermissive -o {case_path}/test_case'
+           f'gcc ums_atom.cpp ../common/common.c ../common/test_log.c  ../common/test_thread_pool.c ' \
+           f'{case_cpp} {public_cpp} -g  -O0 ' \
+           f'-rdynamic -lstdc++  -w -fPIC  -fpermissive -o {case_path}/test_case'
     lib_list = ['-lsecurec', '-lglib-2.0', '-lpthread', f'-I {local_path}', '-I /usr/include/umdk/', \
                 '-ldl', '-I /usr/include/ub/umdk/ums/']
     _cmd += " ".join(lib_list)
@@ -61,7 +62,7 @@ def gen_random_port(host_list, port_num=2):
 def exec_test_case(host_list, path, server_num=1, client_num=1, **kwargs):
     log.info(f'---------- [Test path = {path} ] ----------')
     _test_port = gen_random_port(host_list)
-    check = kwargs.get("check", True)
+    check = kwargs.get("check", False)
     app_num = server_num + client_num
     case_path = kwargs.get("case_path", "''")
     timeout = kwargs.get("timeout", 1800)

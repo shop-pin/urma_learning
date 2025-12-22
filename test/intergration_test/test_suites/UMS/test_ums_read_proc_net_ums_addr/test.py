@@ -32,7 +32,4 @@ class Test(UBUSFeature):
 
     def test_ums_read_proc_net_ums_addr(self):
         log.info(f'--------- [ Test local_path = {local_path} ] ---------')
-        self.exec_test_case(self.host_list, local_path)
-
-if __name__ == '__main__':
-    Test.test1()
+        exec_test_case(self.host_list, local_path)

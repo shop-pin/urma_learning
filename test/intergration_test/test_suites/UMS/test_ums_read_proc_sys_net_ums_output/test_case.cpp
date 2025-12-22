@@ -42,7 +42,7 @@ static int run_test(test_ums_ctx_t *ctx)
         ret = -1;
     }
     CHKERR_JUMP(ret != TEST_SUCCESS, "snd_buf error", EXIT);
-    rc = UMS_SUCCESS;
+    rc = TEST_SUCCESS;
 EXIT:
     sync_time("----------------------------1");
     return rc;
@@ -52,5 +52,6 @@ int main(int argc, char *argv[]) {
     int ret;
     test_ums_ctx_t *ctx = test_ums_ctx_init(argc, argv, 1);
     ret = run_test(ctx);
+    destroy_test_ctx(ctx);
     return ret;
 }
