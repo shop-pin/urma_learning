@@ -59,15 +59,25 @@ def gen_random_port(host_list, port_num=2):
             break
     return _test_port
 
+def get_test_eid(test_host, host_idx):
+    test_eid = ""
+    test_eid = test_host[host_idx].test_nic1_eid
+    return test_eid
+
+def get_test_dev(test_host, host_idx):
+    test_dev = test_host[host_idx].test_nic1
+    return test_dev
+
 def exec_test_case(host_list, path, server_num=1, client_num=1, **kwargs):
     log.info(f'---------- [Test path = {path} ] ----------')
     _test_port = gen_random_port(host_list)
     check = kwargs.get("check", False)
     app_num = server_num + client_num
-    case_path = kwargs.get("case_path", "''")
     timeout = kwargs.get("timeout", 1800)
     test_port = kwargs.get("test_port", _test_port)
     ip_addrs = kwargs.get("ip_addrs", None)
+    case_path = os.path.join(path, "test_case")
+    seed = random.randint(0, 10000)
 
     p_list = []
     test_host = []
@@ -79,13 +89,17 @@ def exec_test_case(host_list, path, server_num=1, client_num=1, **kwargs):
                f' -I {test_host[0].test_nic1_ip},{test_host[-1].test_nic1_ip}'
     
     log.info(f'--------start app1 server--------')
-    _cmd = f'{path}/test_case -a {app_num}:1:{test_port} -p {test_port} {_test_ip}' \
-           f'  -x {case_path}'
+    test_dev = get_test_dev(test_host, 0)
+    test_eid = get_test_eid(test_host, 0)
+    _cmd = f'{path}/test_case -a {app_num}:1:{test_port} -d {test_dev} ' \
+           f'-e {test_eid} -p {test_port} -s {seed} {_test_ip} -x {case_path}'
     p_list.append(test_host[0].exec_cmd(_cmd, background=True))
 
     log.info(f'--------start app2 client--------')
-    _cmd = f'{path}/test_case -a {app_num}:2:{test_port} -p {test_port} {_test_ip}' \
-           f'-x {case_path}'
+    test_dev = get_test_dev(test_host, 1)
+    test_eid = get_test_eid(test_host, 1)
+    _cmd = f'{path}/test_case -a {app_num}:2:{test_port}:{test_host[0].manage_ip} -d {test_dev} ' \
+           f'-e {test_eid} -p {test_port} -s {seed} {_test_ip} -x {case_path}'
     p_list.append(test_host[1].exec_cmd(_cmd, background=True))
 
     if check is True:

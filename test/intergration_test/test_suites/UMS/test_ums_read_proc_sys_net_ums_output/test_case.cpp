@@ -52,6 +52,6 @@ int main(int argc, char *argv[]) {
     int ret;
     test_ums_ctx_t *ctx = test_ums_ctx_init(argc, argv, 1);
     ret = run_test(ctx);
-    destroy_test_ctx(ctx);
+    destroy_test_ums_ctx(ctx);
     return ret;
 }

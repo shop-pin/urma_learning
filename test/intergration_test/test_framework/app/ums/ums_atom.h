@@ -21,11 +21,12 @@
 #define UMS_IPV6_SIZE                (46)
 
 typedef struct {
+    test_context_t *ctx;
     uint32_t app_num;
     uint32_t app_id;
     uint64_t pid;
     uint64_t test_port;
-    char *server_ip;
+    char *test_ip;
     int server_id;
     bool ssl_enable;
     int log_level;
@@ -35,6 +36,7 @@ typedef struct {
 } test_ums_ctx_t;
 
 test_ums_ctx_t *test_ums_ctx_init(int argc, char *argv[], int thread_num);
-int query_proc_net_ums_detail_stram_num(const char *fbk, const char *msg);
+int query_proc_net_ums_detail_stream_num(const char *fbk, const char *msg);
+void destroy_test_ums_ctx(test_ums_ctx_t *ctx);
 
 #endif

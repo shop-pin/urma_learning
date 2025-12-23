@@ -16,7 +16,7 @@ static int run_test(test_ums_ctx_t *ctx)
     vector<int> vec_random = {131072, 262144, 524288, 1048576, 2097152, 4194304}
     int ret = 0;
     int rc = TEST_FAILED;
-    char server_ip_str[10]={0};
+    char test_ip_str[10]={0};
     char close_qperf[MAX_EXEC_CMD_RET_LEN];
 
     for (int i=0; i<vec_random.size(); i++) {
@@ -25,20 +25,20 @@ static int run_test(test_ums_ctx_t *ctx)
         char cmd_revise_rcv[MAX_EXEC_CMD_RET_LEN];
         exec_cmd(cmd_revise_rcv, MAX_EXEC_CMD_RET_LEN, "echo %d > /proc/sys/net/ums/rcv_buf", vec_random[i]);
 
-        if (ctx->app_id == PROC_2) {
+        if (ctx->app_id == PROC_1) {
             char cmd0[MAX_EXEC_CMD_RET_LEN];
             exec_cmd(cmd0, MAX_EXEC_CMD_RET_LEN, "nohup ums_run qperf -lp %d &", ctx->test_port);
 
         }
         sync_time("----------------------------1");
-        if (ctx->app_id == PROC_1) {
+        if (ctx->app_id == PROC_2) {
             char cmd1[MAX_EXEC_CMD_RET_LEN];
-            exec_cmd(cmd1, MAX_EXEC_CMD_RET_LEN, "nohup ums_run qperf %s -lp %d -t 0 -m 8192 tcp_lat &", ctx->server_ip, ctx->test_port);
+            exec_cmd(cmd1, MAX_EXEC_CMD_RET_LEN, "nohup ums_run qperf %s -lp %d -t 0 -m 8192 tcp_lat &", ctx->test_ip, ctx->test_port);
         }
         sync_time("----------------------------2");
-        sprintf(server_ip_str, "%d", ctx->server_ip);
-        int check_num = query_proc_net_ums_detail_stram_num("False", server_ip_str);
-        if (ctx->app_id == PROC_1 && check_num != 2) {
+        sprintf(test_ip_str, "%d", ctx->test_ip);
+        int check_num = query_proc_net_ums_detail_stram_num("False", test_ip_str);
+        if (ctx->app_id == PROC_2 && check_num != 2) {
             ret = -1;
         }
         CHKERR_JUMP(ret != TEST_SUCCESS, "ums connection error", EXIT);
@@ -55,6 +55,6 @@ int main(int argc, char *argv[]) {
     int ret;
     test_ums_ctx_t *ctx = test_ums_ctx_init(argc, argv, 1);
     ret = run_test(ctx);
-    destroy_test_ctx(ctx);
+    destroy_test_ums_ctx(ctx);
     return ret;
 }
