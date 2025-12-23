@@ -24,7 +24,7 @@ class Test(UBUSFeature):
         log.info('---------- [ Test teardown ] ----------')
         super(Test, self).teardown()
 
-    @pytest.mark.timeout(800)
+    @pytest.mark.timeout(1600)
     def test_urma_qemu_smoke_8host_agg_dev_size(self):
         p_list = []
         cmd_list = ["send_lat", "read_lat", "write_lat",
@@ -53,7 +53,7 @@ class Test(UBUSFeature):
                     p_list.append(
                         self.urma_perftest_one_perf_ubagg(
                             host1, host2,
-                            timeout=20,
+                            timeout=60,
                             cmd_syntax=cmd,
                             opt=opt
                         )

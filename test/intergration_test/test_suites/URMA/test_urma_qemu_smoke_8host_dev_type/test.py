@@ -7,6 +7,7 @@
 
 import random
 import logging
+import pytest
 from public import UBUSFeature
  
 log = logging.getLogger()
@@ -21,7 +22,8 @@ class Test(UBUSFeature):
     def teardown(self):
         log.info('---------- [ Test teardown ] ----------')
         super(Test, self).teardown()
- 
+
+    @pytest.mark.timeout(800)
     def test_urma_qemu_smoke_8host_dev_type(self):
         p_list = []
         cmd_list = ["read_bw", "write_bw", "send_bw", "read_lat", "write_lat", "send_lat"]

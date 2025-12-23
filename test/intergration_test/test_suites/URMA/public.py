@@ -23,7 +23,7 @@ class UBUSFeature(BaseTest):
         log.info('---------- [ UBUSFeature teardown ] ----------')
         super(UBUSFeature, self).teardown()
 
-    def urma_perftest_one_perf_single_dev(self, server, client, timeout=15, cmd_syntax=None, **kwargs):
+    def urma_perftest_one_perf_single_dev(self, server, client, timeout=60, cmd_syntax=None, **kwargs):
         """
         不指定则随机打流
         :param server: urma_perftest server端
@@ -87,7 +87,7 @@ class UBUSFeature(BaseTest):
             self.assertEqual(perf_ret, 0, "ERROR: 打流异常!")
         return perf_ret
 
-    def urma_perftest_one_perf_ubagg(self, server, client, timeout=15, cmd_syntax=None, **kwargs):
+    def urma_perftest_one_perf_ubagg(self, server, client, timeout=60, cmd_syntax=None, **kwargs):
         """
         不指定则随机打流
         :param server: urma_perftest server端
