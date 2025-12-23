@@ -14,8 +14,6 @@
 #include "../common/common.h"
 
 
-using namespace ums;
-
 #define UMS_IPV4_MAP_IPV6_PREFIX (0x0000ffff)
 #define UMS_EID_STR_MIN_LEN 3
 #define UMS_MAX_EXPIRE_TIMEOUT 20
@@ -23,7 +21,6 @@ using namespace ums;
 #define UMS_IPV6_SIZE                (46)
 
 typedef struct {
-    ums_server_info_t *server_info;
     uint32_t app_num;
     uint32_t app_id;
     uint64_t pid;

@@ -10,7 +10,7 @@
 
 using namespace std;
 
-int run_test(test_ums_ctx_t *ctx)
+static int run_test(test_ums_ctx_t *ctx)
 {
     int ret = 0;
     int rc = TEST_FAILED;
@@ -25,12 +25,12 @@ int run_test(test_ums_ctx_t *ctx)
     sync_time("----------------------------1");
     if (ctx->app_id == PROC_1) {
         char clnt_cmd[MAX_EXEC_CMD_RET_LEN];
-        exec_cmd(clnt_cmd, MAX_EXEC_CMD_RET_LEN, "for i in $(seq %d %d); do nohup ums_run qperf %s -lp ${i} -m 8192 -t 0 tcp_bw 2>&1 & done", ctx->test_port, ctx->test_port, ctx->server_ip + 10);
+        exec_cmd(clnt_cmd, MAX_EXEC_CMD_RET_LEN, "for i in $(seq %d %d); do nohup ums_run qperf %s -lp ${i} -m 8192 -t 0 tcp_bw 2>&1 & done", ctx->test_port, ctx->test_port + 10, ctx->server_ip);
     }
     sync_time("----------------------------2");
     
     // 校验流量走ums
-    sprintf(server_ip_str, "%d", ctx->test_port);
+    sprintf(server_ip_str, "%d", ctx->server_ip);
     check_num = query_proc_net_ums_detail_stram_num("True", server_ip_str);
     if (ctx->app_id == PROC_1 && check_num != 20) {
         ret = -1;

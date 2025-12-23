@@ -11,7 +11,7 @@
 
 using namespace std;
 
-int run_test(test_ums_ctx_t *ctx)
+static int run_test(test_ums_ctx_t *ctx)
 {
     int ret = 0;
     int rc = TEST_FAILED;
