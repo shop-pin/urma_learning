@@ -1383,7 +1383,6 @@ static int check_both_side_cfg(const perftest_config_t *local_cfg, const perftes
     return 0;
 }
 
-// Temporary hardcoding for compatibility with other perftest versions
 #define OFF_SET (360)
 
 int check_remote_cfg(perftest_config_t *cfg)
