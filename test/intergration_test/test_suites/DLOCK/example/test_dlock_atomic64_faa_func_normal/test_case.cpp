@@ -43,8 +43,8 @@ static int run_test(test_dlock_ctx_t *ctx)
         CHKERR_JUMP(res_val != i + 1, "umo_atomic64_get_snapshot", EXIT);
         TEST_LOG_INFO("[i:%d] end\n",i);
     }
-    ret = test_dlock_atomic64_create_get(ctx->client_ids[0], obj_id);
-    CHKERR_JUMP(ret != TEST_SUCCESS, "test_dlock_atomic64_create_get", EXIT);
+    ret = test_dlock_atomic64_release_destroy(ctx->client_ids[0], obj_id);
+    CHKERR_JUMP(ret != TEST_SUCCESS, "test_dlock_atomic64_release_destroy", EXIT);
     rc = TEST_SUCCESS;
 EXIT:
     sync_time("-------------------------- 4");

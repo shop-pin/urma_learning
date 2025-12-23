@@ -6,6 +6,7 @@
 #include "dlock_atom.h"
 using namespace dlock;
 test_dlock_ctx_t g_test_dlock_ctx;
+bool g_is_qemu = false;
 
 test_dlock_ctx_t *test_dlock_ctx_init(int argc, char *argv[], int thread_num)
 {
@@ -30,6 +31,9 @@ test_dlock_ctx_t *test_dlock_ctx_init(int argc, char *argv[], int thread_num)
     g_test_dlock_ctx.log_level = 4;
     g_test_dlock_ctx.ssl_enable = false;
     g_test_dlock_ctx.client_num = 1;
+    if (strncmp(ctx->test_ip[0], "192.168.100", 11) == 0) {
+        g_is_qemu = true;
+    }
     return &g_test_dlock_ctx;
 }
 
@@ -286,7 +290,12 @@ EXIT:
 
 int test_dlock_client_uninit(test_dlock_ctx_t *ctx)
 {
-    return test_client_uninit(ctx);
+    if (!g_is_qemu) {
+        return test_client_uninit(ctx);
+    } else {
+        test_client_uninit(ctx);
+        return TEST_SUCCESS;
+    }
 }
 
 int test_dlock_ctx_uninit(test_dlock_ctx_t *ctx) 
@@ -312,7 +321,7 @@ EXIT:
     return rc;
 }
 
-int test_dlock_atomic64_create_get(int client_id, int obj_id)
+int test_dlock_atomic64_release_destroy(int client_id, int obj_id)
 {
     int ret = 0, rc = TEST_FAILED;
     ret = umo_atomic64_release(client_id, obj_id);

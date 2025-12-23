@@ -55,7 +55,7 @@ int test_client_prepare(test_dlock_ctx_t *ctx);
 int test_dlock_client_uninit(test_dlock_ctx_t *ctx);
 int test_dlock_ctx_uninit(test_dlock_ctx_t *ctx);
 int test_dlock_atomic64_create_get(int client_id, struct umo_atomic64_desc *desc, uint64_t init_val, int *obj_id);
-int test_dlock_atomic64_create_get(int client_id, int obj_id);
+int test_dlock_atomic64_release_destroy(int client_id, int obj_id);
 int test_trylock(int client_id, const struct lock_request *req, void *result);
 int test_extend(int client_id, const struct lock_request *req, void *result);
 int test_unlock(int client_id, int lock_id, void *result);
