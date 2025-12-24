@@ -24,7 +24,7 @@ def prepare_test_case(host_list, case_path, case_name="test_case"):
            f'gcc ums_atom.cpp ../common/common.c ../common/test_log.c  ../common/test_thread_pool.c ' \
            f'{case_cpp} {public_cpp} -g  -O0 ' \
            f'-rdynamic -lstdc++  -w -fPIC  -fpermissive -o {case_path}/test_case'
-    lib_list = ['-lsecurec', '-lglib-2.0', '-lpthread', f'-I {local_path}', '-I /usr/include/umdk/', \
+    lib_list = [' -lglib-2.0', '-lpthread', f'-I {local_path}', '-I /usr/include/umdk/', \
                 '-ldl', '-I /usr/include/ub/umdk/ums/']
     _cmd += " ".join(lib_list)
     p_list = []

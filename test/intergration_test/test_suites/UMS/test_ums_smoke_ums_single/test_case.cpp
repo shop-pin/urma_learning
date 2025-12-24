@@ -4,7 +4,7 @@
  * Description: ums example
  */
 
-#include "public.h"
+#include "../public.h"
 #include <set>
 #include <vector>
 #include <string>
@@ -32,7 +32,7 @@ static int run_test(test_ums_ctx_t *ctx)
     
     // 校验流量走ums
     sprintf(test_ip_str, "%d", ctx->test_ip);
-    check_num = query_proc_net_ums_detail_stram_num("False", test_ip_str);
+    check_num = query_proc_net_ums_detail_stream_num("False", test_ip_str);
     if (ctx->app_id == PROC_2 && check_num != 2) {
         ret = -1;
     }

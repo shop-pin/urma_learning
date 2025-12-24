@@ -4,7 +4,7 @@
  * Description: ums example
  */
 
-#include "public.h"
+#include "../public.h"
 #include <set>
 #include <vector>
 #include <string>
@@ -15,13 +15,13 @@ static int run_test(test_ums_ctx_t *ctx)
 {
     int ret = 0;
     int rc = TEST_FAILED;
-    int check_num
+    int check_num;
     char port_str[10]={0};
     char close_qperf[MAX_EXEC_CMD_RET_LEN];
 
     if (ctx->app_id == PROC_1) {
         char serv_cmd[MAX_EXEC_CMD_RET_LEN];
-        exec_cmd(serv_cmd, MAX_EXEC_CMD_RET_LEN, "nohup qperf -lp %d &", ctx->test_port,);
+        exec_cmd(serv_cmd, MAX_EXEC_CMD_RET_LEN, "nohup qperf -lp %d &", ctx->test_port);
     }
     sync_time("----------------------------1");
     if (ctx->app_id == PROC_2) {
