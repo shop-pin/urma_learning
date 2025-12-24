@@ -13,7 +13,7 @@ using namespace std;
 static int run_test(test_ums_ctx_t *ctx)
 {
     char clnt_buf[2097152] = {0}, serv_buf[2097152] = {0};
-    vector<int> vec_random = {131072, 262144, 524288, 1048576, 2097152, 4194304}
+    vector<int> vec_random = {131072, 262144, 524288, 1048576, 2097152, 4194304};
     int ret = 0;
     int rc = TEST_FAILED;
     char test_ip_str[10]={0};
@@ -37,7 +37,7 @@ static int run_test(test_ums_ctx_t *ctx)
         }
         sync_time("----------------------------2");
         sprintf(test_ip_str, "%d", ctx->test_ip);
-        int check_num = query_proc_net_ums_detail_stram_num("False", test_ip_str);
+        int check_num = query_proc_net_ums_detail_stream_num("False", test_ip_str);
         if (ctx->app_id == PROC_2 && check_num != 2) {
             ret = -1;
         }

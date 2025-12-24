@@ -4,7 +4,7 @@
  * Description: ums example
  */
 
-#include "public.h"
+#include "../public.h"
 #include <set>
 #include <vector>
 #include <string>

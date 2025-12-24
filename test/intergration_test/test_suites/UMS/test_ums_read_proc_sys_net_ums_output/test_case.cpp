@@ -13,7 +13,7 @@ static int run_test(test_ums_ctx_t *ctx)
 {
     int ret = 0;
     int rc = TEST_FAILED;
-    char ret1[50], ret2[50], ret3[50], ret4[50]
+    char ret1[50], ret2[50], ret3[50], ret4[50];
     char cmd1[MAX_EXEC_CMD_RET_LEN];
     char cmd2[MAX_EXEC_CMD_RET_LEN];
     char cmd3[MAX_EXEC_CMD_RET_LEN];
