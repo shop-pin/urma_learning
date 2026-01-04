@@ -10,8 +10,7 @@
 #include "register/op_def_registry.h"
 
 namespace ops {
-class MoeDispatchNormal : public OpDef
-{
+class MoeDispatchNormal : public OpDef {
 public:
     explicit MoeDispatchNormal(const char *name) : OpDef(name)
     {
