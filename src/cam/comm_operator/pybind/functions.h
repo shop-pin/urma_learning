@@ -16,21 +16,21 @@
 #include <torch/csrc/autograd/custom_function.h>
 #include "torch_npu/csrc/core/npu/NPUStream.h"
 
-at::Tensor fused_deep_moe_impl_autograd(
+std::vector<at::Tensor> fused_deep_moe_impl_autograd(
     const at::Tensor &x, \
     const at::Tensor &expertIds, \
     const at::Tensor &gmm1PermutedWeight, \
     const at::Tensor &gmm1PermutedWeightScale, \
     const at::Tensor &gmm2Weight, \
     const at::Tensor &gmm2WeightScale, \
-    const at::Tensor &expertSmoothScalesOptional, \
-    const at::Tensor &expertScalesOptional, \
+    const c10::optional<at::Tensor> &expertSmoothScalesOptional, 
+    const c10::optional<at::Tensor> &expertScalesOptional, 
     c10::string_view groupEp, \
     int64_t epRankSize, \
     int64_t epRankId, \
     int64_t moeExpertNum, \
-    int64_t shareExpertNum, \
-    int64_t shareExpertRankNum, \
+    int64_t sharedExpertNum, \
+    int64_t sharedExpertRankNum, \
     int64_t quantMode, \
     int64_t globalBs);
 

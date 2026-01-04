@@ -70,6 +70,7 @@ private:
     __aicore__ inline void SendToSharedExpert();
     __aicore__ inline void SendToMoeExpert();
     __aicore__ inline void AlltoAllDispatch();
+    __aicore__ inline void FillExpertCountByRowRange(uint32_t startTokenRow, uint32_t endTokenRow);
     __aicore__ inline void LocalWindowCopy();
     __aicore__ inline void QuantProcess(uint32_t expertIndex);
     __aicore__ inline void LocalSharedExpertCopyWindow(uint32_t rankIndex, uint32_t tokenOffset,
@@ -500,6 +501,21 @@ __aicore__ inline void CamMoeDistributeDispatch<TemplateDispatchTypeFunc>::SendT
 }
 
 template <TemplateDispatchTypeClass>
+__aicore__ inline void CamMoeDistributeDispatch<TemplateDispatchTypeFunc>::FillExpertCountByRowRange(
+                                        uint32_t startTokenRow, uint32_t endTokenRow)
+{
+    for (int tokenIndex = startTokenRow * axisK_; tokenIndex < endTokenRow * axisK_; ++tokenIndex) {
+        int row = tokenIndex / axisK_;
+        int32_t expertId = expertIdsTensor_(tokenIndex);
+        if (expertId < 0) {
+            continue;
+        }
+        expertCountTensor_(tokenIndex) =
+            (int32_t)tableLocalTensor_(row * moeExpertRankNumAligned_ + expertId);
+    }
+}
+
+template <TemplateDispatchTypeClass>
 __aicore__ inline void CamMoeDistributeDispatch<TemplateDispatchTypeFunc>::AlltoAllDispatch()
 {
     uint32_t expertIdsCnt = axisBS_ * axisK_;
@@ -547,16 +563,9 @@ __aicore__ inline void CamMoeDistributeDispatch<TemplateDispatchTypeFunc>::Allto
         GlobalTensor<int32_t> expandIdxGMTensor;
         if (aivId_ < moeUsedAivNum_) {
             SyncFunc<AscendC::HardEvent::V_S>();
+            FillExpertCountByRowRange(startTokenRow, endTokenRow);
+            SyncFunc<AscendC::HardEvent::S_MTE3>();
             for (int row = startTokenRow; row < endTokenRow; ++row) {
-                for (int expertIndex = 0; expertIndex < axisK_; ++expertIndex) {
-                    int32_t expertId = expertIdsTensor_(row * axisK_ + expertIndex);
-                    if (expertId < 0) {
-                        continue;
-                    }
-                    expertCountTensor_(row * axisK_ + expertIndex) =
-                        (int32_t)tableLocalTensor_(row * moeExpertRankNumAligned_ + expertId);
-                }
-                SyncFunc<AscendC::HardEvent::S_MTE3>();
                 expandIdxGMTensor.SetGlobalBuffer(
                     (__gm__ int32_t *)(expandIdxOutGM_ + row * axisK_ * sizeof(uint32_t)));
                 DataCopy(expandIdxGMTensor, expertCountTensor_[row * axisK_], axisK_);

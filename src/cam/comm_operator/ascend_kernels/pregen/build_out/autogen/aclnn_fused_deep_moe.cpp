@@ -36,8 +36,8 @@ aclnnStatus aclnnFusedDeepMoeGetWorkspaceSize(
     int64_t epRankSize,
     int64_t epRankId,
     int64_t moeExpertNum,
-    int64_t shareExpertNum,
-    int64_t shareExpertRankNum,
+    int64_t sharedExpertNum,
+    int64_t sharedExpertRankNum,
     int64_t quantMode,
     int64_t globalBs,
     const aclTensor *output,
@@ -47,7 +47,7 @@ aclnnStatus aclnnFusedDeepMoeGetWorkspaceSize(
 {
     return aclnnInnerFusedDeepMoeGetWorkspaceSize(x, expertIds, gmm1PermutedWeight, gmm1PermutedWeightScale,
         gmm2Weight, gmm2WeightScale, expertSmoothScalesOptional, expertScalesOptional, groupEp, epRankSize,
-        epRankId, moeExpertNum, shareExpertNum, shareExpertRankNum, quantMode, globalBs,
+        epRankId, moeExpertNum, sharedExpertNum, sharedExpertRankNum, quantMode, globalBs,
         output, epRecvCount, workspaceSize, executor);
 }
 
