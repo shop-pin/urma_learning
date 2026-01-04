@@ -13,7 +13,8 @@
 #include <cstdint>
 #include "kernel_tiling/kernel_tiling.h"
 
-struct CamMoeCombineNormalInfo {
+// a3
+struct MoeCombineNormalInfo {
     uint32_t epWorldSize;
     uint32_t tpWorldSize;
     uint32_t epRankId;
@@ -31,11 +32,11 @@ struct CamMoeCombineNormalInfo {
     float armAvgFactor;
     float epsilon;
 };
-struct CamMoeCombineNormalTilingData {
+struct MoeCombineNormalTilingData {
     Mc2InitTiling mc2InitTiling;
     Mc2CcTiling mc2CcTiling1;
     Mc2CcTiling mc2CcTiling2;
-    CamMoeCombineNormalInfo camMoeCombineNormalInfo;
+    MoeCombineNormalInfo moeCombineNormalInfo;
 };
 
-#endif  // MOE_COMBINE_NORMAL_TILING_H
+#endif //MOE_COMBINE_NORMAL_TILING_H
