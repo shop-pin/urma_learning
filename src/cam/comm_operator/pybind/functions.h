@@ -23,8 +23,8 @@ std::vector<at::Tensor> fused_deep_moe_impl_autograd(
     const at::Tensor &gmm1PermutedWeightScale, \
     const at::Tensor &gmm2Weight, \
     const at::Tensor &gmm2WeightScale, \
-    const c10::optional<at::Tensor> &expertSmoothScalesOptional, 
-    const c10::optional<at::Tensor> &expertScalesOptional, 
+    const c10::optional<at::Tensor> &expertSmoothScalesOptional, \
+    const c10::optional<at::Tensor> &expertScalesOptional, \
     c10::string_view groupEp, \
     int64_t epRankSize, \
     int64_t epRankId, \

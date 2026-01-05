@@ -53,7 +53,7 @@ print(compile_args)
 
 exts = []
 ext1 = NpuExtension(
-    name="cam_ge_op_lib",
+    name="umdk_cam_op_lib",
     include_dirs=[
         os.path.join(torch_npu_path, "include"),
         os.path.join(torch_npu_path, "include/third_party/acl/inc/acl/"),
@@ -92,9 +92,9 @@ exts.append(ext1)
 BdistWheelBuild.dependencies = ["libc10.so", "libtorch.so", "libtorch_cpu.so", "libtorch_python.so", "libtorch_npu.so"]
 
 setup(
-    name="cam_ge_operator",
+    name="umdk_cam_op_lib",
     version=env_version,
-    keywords="cam_ge_op_lib",
+    keywords="umdk_cam_op_lib",
     ext_modules=exts,
     packages=find_packages(),
     cmdclass={
