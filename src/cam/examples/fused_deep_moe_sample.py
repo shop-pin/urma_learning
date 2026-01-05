@@ -23,8 +23,7 @@ import torch_npu
 import torchair
 
 # 导入CAM算子库。导入前请保证算子库已经正确安装。
-import cam_ge_op_lib
-from cam_ge_op_lib import fused_deep_moe
+import umdk_cam_op_lib
 
 torch_npu.npu.config.allow_internal_format = True
 LOG_NAME = "fused_deep_moe_sample_logs"
@@ -276,24 +275,23 @@ class FusionOp(DecodeMoeOps):
                                                     requires_grad=False)
 
     def _apply_ops(self, x, expert_ids, smooth_scales, expert_scales):
-        # output, _ = torch.ops.cam_ge_op_lib.fused_deep_moe(
-        output, recv_count = cam_ge_op_lib.fused_deep_moe(
-            x,
-            expert_ids,
-            self.gmm1_weight,
-            self.gmm1_weight_scale,
-            self.gmm2_weight,
-            self.gmm2_weight_scale,
-            smooth_scales,
-            expert_scales,
-            self.ep_hcomm_info,
-            self.ep_world_size,
-            self.global_rank_id,
-            self.moe_expert_num,
-            1,
-            self.shared_expert_rank_num,
-            0,
-            self.batch_size * self.ep_world_size)
+        output, recv_count = torch.ops.umdk_cam_op_lib.fused_deep_moe(
+            x=x,
+            expertIds=expert_ids,
+            gmm1PermutedWeight=self.gmm1_weight,
+            gmm1PermutedWeightScale=self.gmm1_weight_scale,
+            gmm2Weight=self.gmm2_weight,
+            gmm2WeightScale=self.gmm2_weight_scale,
+            expertSmoothScalesOptional=smooth_scales,
+            expertScalesOptional=expert_scales,
+            groupEp=self.ep_hcomm_info,
+            epRankSize=self.ep_world_size,
+            epRankId=self.global_rank_id,
+            moeExpertNum=self.moe_expert_num,
+            sharedExpertNum=1,
+            sharedExpertRankNum=self.shared_expert_rank_num,
+            quantMode=0,
+            globalBs=self.batch_size * self.ep_world_size)
         return (output, recv_count)
 
 
