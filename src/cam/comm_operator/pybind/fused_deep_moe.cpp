@@ -27,10 +27,10 @@ constexpr int KERNEL_PARAM_CNT = 3;
 std::vector<at::Tensor> fused_deep_moe_impl_npu(
     const at::Tensor &x, \
     const at::Tensor &expertIds, \
-    const at::TensorList &gmm1_permuted_weight, \
-    const at::TensorList &gmm1_permuted_weight_scale, \
-    const at::TensorList &gmm2_weight, \
-    const at::TensorList &gmm2_weight_scale, \
+    const at::TensorList &gmm1PermutedWeight, \
+    const at::TensorList &gmm1PermutedWeightScale, \
+    const at::TensorList &gmm2Weight, \
+    const at::TensorList &gmm2WeightScale, \
     const c10::optional<at::Tensor> &expertSmoothScalesOptional, \
     const c10::optional<at::Tensor> &expertScalesOptional, \
     c10::string_view groupEp, \
@@ -54,9 +54,9 @@ std::vector<at::Tensor> fused_deep_moe_impl_npu(
     bool isShareExpert = (epRankId < sharedExpertRankNum);
     int64_t localExpertNum = 0;
     if (isShareExpert) {
-        localExpertNum = epRankSize;
+        localExpertNum = 1;
     } else {
-        localExpertNum = epRankSize * (moeExpertNum / (epRankSize - sharedExpertRankNum));
+        localExpertNum = moeExpertNum / (epRankSize - sharedExpertRankNum);
     }
     auto opts = expertIds.options().dtype(at::kLong);
     at::Tensor expert_token_nums = at::empty({localExpertNum}, opts);
@@ -102,10 +102,10 @@ std::vector<at::Tensor> fused_deep_moe_backward_impl_npu(const at::Tensor &self)
 std::vector<at::Tensor> fused_deep_moe_impl_meta(
     const at::Tensor &x, \
     const at::Tensor &expertIds, \
-    const at::TensorList &gmm1_permuted_weight, \
-    const at::TensorList &gmm1_permuted_weight_scale, \
-    const at::TensorList &gmm2_weight, \
-    const at::TensorList &gmm2_weight_scale, \
+    const at::TensorList &gmm1PermutedWeight, \
+    const at::TensorList &gmm1PermutedWeightScale, \
+    const at::TensorList &gmm2Weight, \
+    const at::TensorList &gmm2WeightScale, \
     const c10::optional<at::Tensor> &expertSmoothScalesOptional, \
     const c10::optional<at::Tensor> &expertScalesOptional, \
     c10::string_view groupEp, \
@@ -121,14 +121,14 @@ std::vector<at::Tensor> fused_deep_moe_impl_meta(
     auto expertIdsShape = expertIds.sizes();
     int h = xShape[1];
     int bs = expertIdsShape[0];
-    at::Tensor result = at::empty({bs, h}, x.options().device(at::kMeta));
+    at::Tensor output = at::empty({bs, h}, x.options().device(at::kMeta));
 
     bool isShareExpert = (epRankId < sharedExpertRankNum);
     int64_t localExpertNum = 0;
     if (isShareExpert) {
-        localExpertNum = epRankSize;
+        localExpertNum = 1;
     } else {
-        localExpertNum = epRankSize * (moeExpertNum / (epRankSize - sharedExpertRankNum));
+        localExpertNum = moeExpertNum / (epRankSize - sharedExpertRankNum);
     }
     auto opts = expertIds.options().dtype(at::kLong); 
     at::Tensor expert_token_nums = at::empty({localExpertNum}, opts.device(at::kMeta)); 
@@ -139,10 +139,10 @@ std::vector<at::Tensor> fused_deep_moe_impl_meta(
 std::vector<at::Tensor> fused_deep_moe_impl(
     const at::Tensor &x, \
     const at::Tensor &expertIds, \
-    const at::TensorList &gmm1_permuted_weight, \
-    const at::TensorList &gmm1_permuted_weight_scale, \
-    const at::TensorList &gmm2_weight, \
-    const at::TensorList &gmm2_weight_scale, \
+    const at::TensorList &gmm1PermutedWeight, \
+    const at::TensorList &gmm1PermutedWeightScale, \
+    const at::TensorList &gmm2Weight, \
+    const at::TensorList &gmm2WeightScale, \
     const c10::optional<at::Tensor> &expertSmoothScalesOptional, \
     const c10::optional<at::Tensor> &expertScalesOptional, \
     c10::string_view groupEp, \
@@ -168,10 +168,10 @@ public:
     static std::vector<at::Tensor> forward(AutogradContext *ctx, \
                             const at::Tensor &x, \
                             const at::Tensor &expertIds, \
-                            const at::TensorList &gmm1_permuted_weight, \
-                            const at::TensorList &gmm1_permuted_weight_scale, \
-                            const at::TensorList &gmm2_weight, \
-                            const at::TensorList &gmm2_weight_scale, \
+                            const at::TensorList &gmm1PermutedWeight, \
+                            const at::TensorList &gmm1PermutedWeightScale, \
+                            const at::TensorList &gmm2Weight, \
+                            const at::TensorList &gmm2WeightScale, \
                             const c10::optional<at::Tensor> &expertSmoothScalesOptional, \
                             const c10::optional<at::Tensor> &expertScalesOptional, \
                             c10::string_view groupEp, \
@@ -208,10 +208,10 @@ public:
 std::vector<at::Tensor> fused_deep_moe_impl_autograd(
     const at::Tensor &x, \
     const at::Tensor &expertIds, \
-    const at::TensorList &gmm1_permuted_weight, \
-    const at::TensorList &gmm1_permuted_weight_scale, \
-    const at::TensorList &gmm2_weight, \
-    const at::TensorList &gmm2_weight_scale, \
+    const at::TensorList &gmm1PermutedWeight, \
+    const at::TensorList &gmm1PermutedWeightScale, \
+    const at::TensorList &gmm2Weight, \
+    const at::TensorList &gmm2WeightScale, \
     const c10::optional<at::Tensor> &expertSmoothScalesOptional, \
     const c10::optional<at::Tensor> &expertScalesOptional, \
     c10::string_view groupEp, \

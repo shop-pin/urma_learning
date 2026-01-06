@@ -49,11 +49,6 @@ __aicore__ inline void SyncFunc()
     AscendC::WaitFlag<event>(eventID);
 }
 
-#define TemplateDispatchTypeClass                                                                          \
-    typename XType, typename ExpandXOutType, bool StaticQuant, bool DynamicQuant, bool IsSmoothScaleExist, \
-        bool IsNeedAllgater
-#define TemplateDispatchTypeFunc XType, ExpandXOutType, StaticQuant, DynamicQuant, IsSmoothScaleExist, IsNeedAllgater
-
 using namespace AscendC;
 template <TemplateDispatchTypeClass>
 class CamMoeDistributeDispatch

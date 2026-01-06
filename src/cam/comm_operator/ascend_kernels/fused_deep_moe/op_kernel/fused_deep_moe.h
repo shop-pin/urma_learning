@@ -111,7 +111,7 @@ CATLASS_DEVICE void GmmDeqSwigluQuant(GemmCoord problemShape, uint32_t groupCoun
     using GemmKernel = typename std::conditional<
         (EXEC_FLAG & EXEC_FLAG_DEEP_FUSE),
         Gemm::Kernel::GroupedMatmulSliceMPerTokenDequantSwigluQuantMultiStageWorkspace<
-            XType, BlockMmad, BlockEpilogue, BlockScheduler, WORKSPACE_STAGES, ElementGroupList>,
+            EXEC_FLAG, XType, BlockMmad, BlockEpilogue, BlockScheduler, WORKSPACE_STAGES, ElementGroupList>,
         Gemm::Kernel::GroupedMatmulSliceMPerTokenDequantSwigluQuantMultiStageWorkspaceWithShallowDispatch<
             BlockMmad, BlockEpilogue, BlockScheduler, WORKSPACE_STAGES, ElementGroupList>>::type;
 
@@ -395,10 +395,10 @@ __aicore__ inline void FusedDeepMoe<TemplateMC2TypeFunc>::Process()
     GM_ADDR gmResvered = workspaceGM_ + workspaceOffset;
     workspaceOffset += RoundUp<GM_ALIGN_BYTE>(resveredWorkSpaceSize);
 
-    if constexpr (EXEC_FLAG == 0) {
+    if constexpr ((EXEC_FLAG & EXEC_FLAG_DEEP_FUSE) == 0) {
         if constexpr (g_coreType == AscendC::AIV) {
             AscendC::TPipe tpipe;
-            MoeDistributeDispatchImpl::CamMoeDistributeDispatch<ExpandXType, int8_t, false, true, false, false>
+            MoeDistributeDispatchImpl::CamMoeDistributeDispatch<ExpandXType, int8_t, false, true, false, false, EXEC_FLAG>
                 dispatcher;
             dispatcher.Init(gmX_, gmexpertIds_, gmSmoothScales_, gmX1Token, gmX1Scale, gmExpandIdx, gmGroupList,
                             gmEpSendCount, gmExpertTokenNums_, nullptr, gmWorkspace, &tpipe, tilingData_);
