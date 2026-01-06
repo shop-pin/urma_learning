@@ -251,7 +251,7 @@ inline aclTensor *ConvertType(const at::Tensor &at_tensor)
             format = ACL_FORMAT_ND;
     }
 
-    if (acl_data_type == ACL_INT8 && dimNum == 3) {
+    if (acl_data_type == ACL_INT8 && (dimNum == 3 || dimNum == 2)) {
         format = ACL_FORMAT_FRACTAL_NZ;
     }
 
