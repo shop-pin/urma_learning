@@ -364,7 +364,7 @@ __aicore__ inline static void CalQuantRow(const uint32_t column, uint32_t &row)
     row = row < MAX_QUANT_ROW_ONCE ? row : MAX_QUANT_ROW_ONCE;
 }
 
-template <typename XType_, class BlockMmad_, class BlockEpilogue_, class BlockScheduler_, uint32_t WORKSPACE_STAGES_,
+template <uint32_t EXEC_FLAG, typename XType_, class BlockMmad_, class BlockEpilogue_, class BlockScheduler_, uint32_t WORKSPACE_STAGES_,
           class ElementGroupList_>
 class GroupedMatmulSliceMPerTokenDequantSwigluQuantMultiStageWorkspace
 {

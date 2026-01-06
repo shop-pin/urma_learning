@@ -70,5 +70,5 @@ constexpr uint32_t GMM2_SWIZZLE_DIRECTION = 0;
 constexpr uint32_t WORKSPACE_STAGES = 4;
 
 constexpr uint32_t EXEC_FLAG_DEEP_FUSE = (1U << 0);
-constexpr uint32_t EXEC_FLAG_TENSOR_LIST = (1U << 2);
+constexpr uint32_t EXEC_FLAG_TENSOR_LIST = (1U << 1);
 #endif  // FUSED_DEEP_MOE_TILING_H
