@@ -6,6 +6,13 @@
 # Note:
 # History: 2025-07-20 create cam building script
 
+# 定义全局屏蔽列表
+exclude_list=()
+if [ -z "${SHMEM_HOME_PATH}" ]; then
+    echo "Skipping shmem (SHMEM_HOME_PATH not set)"
+    exclude_list+=("moe_combine_shmem" "moe_dispatch_shmem")
+fi
+
 CopyOps() {
     local src_dir="$1" # 源目录
     local dst_dir="$2" # 目标目录
@@ -53,6 +60,12 @@ BuildAscendProj() {
     CopyOps "./ascend_kernels" "./${proj_name}"
     python $SCRIPTS_PATH/comm_operator/set_conf.py ./${proj_name}/CMakePresets.json $build_type True CAM
     cp -rf ./ascend_kernels/pregen ./${proj_name}
+    # if need to compile shmem opts: replace msopgen camke files with pregen {.ascend_kernels/pregen/cmake}
+    if [ -n "${SHMEM_HOME_PATH}" ]; then
+        cp -rf ./ascend_kernels/pregen/cmake ./${proj_name}
+    else
+        rm -f ./${proj_name}/pregen/build_out/autogen/*shmem*
+    fi
 
     source $ASCEND_HOME_PATH/bin/setenv.bash
     cd ${proj_name}

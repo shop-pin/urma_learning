@@ -67,4 +67,48 @@ moe_combine_normal_impl_autograd(
     int64_t tpRankId, \
     int64_t moeExpertNum, \
     int64_t globalBs);
+
+std::vector<at::Tensor> moe_dispatch_shmem_impl_autograd( \
+    const at::Tensor &x, \
+    const at::Tensor &expertIds, \
+    const c10::optional<at::Tensor> &scales, \
+    const c10::optional<at::Tensor> &xActiveMask, \
+    int64_t epWorldSize, \
+    int64_t epRankId, \
+    int64_t moeExpertNum, \
+    int64_t tpWorldSize, \
+    int64_t tpRankId, \
+    int64_t expertShardType, \
+    int64_t sharedExpertNum, \
+    int64_t sharedExpertRankNum, \
+    int64_t quantMode, \
+    int64_t globalBS, \
+    int64_t expertTokenNumsType, \
+    int64_t extInfo);
+
+at::Tensor moe_combine_shmem_impl_autograd( \
+    const at::Tensor &expandX, \
+    const at::Tensor &expertIds, \
+    const at::Tensor &expandIdx, \
+    const at::Tensor &epSendCounts, \
+    const at::Tensor &expertScales, \
+    const c10::optional<at::Tensor> &tpSendCounts, \
+    const c10::optional<at::Tensor> &xActiveMask, \
+    const c10::optional<at::Tensor> &activationScale, \
+    const c10::optional<at::Tensor> &weightScale, \
+    const c10::optional<at::Tensor> &groupList, \
+    const c10::optional<at::Tensor> &expandScales, \
+    int64_t epWorldSize, \
+    int64_t epRankId, \
+    int64_t moeExpertNum, \
+    int64_t tpWorldSize, \
+    int64_t tpRankId, \
+    int64_t expertShardType, \
+    int64_t sharedExpertNum, \
+    int64_t sharedExpertRankNum, \
+    int64_t globalBS, \
+    int64_t commQuantMode, \
+    int64_t extInfo, \
+    int64_t outDtype, \
+    int64_t groupListType);
 #endif // COMMON_OPS_CSRC_FUNCTIONS_H_

@@ -7,6 +7,10 @@ opbuild(OPS_SRC ${ops_srcs}
     OUT_DIR ${ASCEND_AUTOGEN_PATH}
 )
 
+if(DEFINED ENV{SHMEM_HOME_PATH})
+    include_directories($ENV{SHMEM_HOME_PATH}/shmem/include)
+endif()
+
 file(GLOB group_proto_src ${ASCEND_AUTOGEN_PATH}/group_proto/*.cc)
 
 add_library(cust_op_proto SHARED
@@ -134,7 +138,14 @@ else()
         -Wl,--no-whole-archive
     )
     target_compile_options(cust_opapi PRIVATE -DLOG_CPP)
-    target_include_directories(cust_opapi INTERFACE ${CMAKE_SOURCE_DIR}/build_out/library/)
+    if(DEFINED ENV{SHMEM_HOME_PATH})
+        target_include_directories(cust_opapi INTERFACE ${CMAKE_SOURCE_DIR}/build_out/library/
+                                    $ENV{SHMEM_HOME_PATH}/shmem/lib
+                                    $ENV{SHMEM_HOME_PATH}/memfabric_hybrid/lib)
+    else()
+        target_include_directories(cust_opapi INTERFACE ${CMAKE_SOURCE_DIR}/build_out/library/)
+    endif()
+
     target_link_libraries(cust_opapi PRIVATE intf_pub ascendcl nnopbase cust_optiling_obj cust_op_proto_obj ascend_opregistry ascend_kernels)
     add_dependencies(cust_opapi ascend_opregistry)
 endif()
