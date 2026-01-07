@@ -23,7 +23,23 @@ CopyOps() {
     # 遍历源目录下所有直接子目录 （包括含空格的目录）
     find "$src_dir" -mindepth 1 -maxdepth 1 -type d -print0 | while IFS= read -r -d '' subdir; do
         # 检查子目录是否存在（双重验证）
+        subdir_name=$(basename "$subdir")
+
         if [ -d "$subdir" ]; then
+            # 检查当前子目录是否在屏蔽列表中
+            skip=false
+            for excluded_dir in "${exclude_list[@]}"; do
+                if [ "$subdir_name" = "$excluded_dir" ]; then
+                    skip=true
+                    break
+                fi
+            done
+
+            # 如果在屏蔽列表中，则跳过处理
+            if [ "$skip" = true ]; then
+                continue
+            fi
+
             # 处理op_host目录
             if [ -d "$subdir/op_host" ]; then
                 cp -rf "$subdir/op_host/"* "$dst_dir/op_host/"
