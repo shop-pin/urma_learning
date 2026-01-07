@@ -267,7 +267,11 @@ __aicore__ inline void CamMoeDistributeCombine<TemplateMC2TypeFunc>::Init(
     axisBS_ = tilingData->disGmmDeqSwigluQuantGmmDeqComInfo.bs;
     axisH_ = tilingData->disGmmDeqSwigluQuantGmmDeqComInfo.h;
     axisK_ = tilingData->disGmmDeqSwigluQuantGmmDeqComInfo.k;
-    aivNum_ = tilingData->disGmmDeqSwigluQuantGmmDeqComInfo.aivNum;
+    if constexpr (EXEC_FLAG & EXEC_FLAG_DEEP_FUSE) {
+        aivNum_ = get_block_num();
+    } else {
+        aivNum_ = tilingData->disGmmDeqSwigluQuantGmmDeqComInfo.aivNum;
+    }
     ubSize_ = tilingData->disGmmDeqSwigluQuantGmmDeqComInfo.totalUbSize;
     sharedExpertRankNum_ = tilingData->disGmmDeqSwigluQuantGmmDeqComInfo.sharedExpertRankNum;
     moeExpertNum_ = tilingData->disGmmDeqSwigluQuantGmmDeqComInfo.moeExpertNum;
@@ -353,13 +357,13 @@ template <TemplateMC2TypeClass>
 __aicore__ inline void CamMoeDistributeCombine<TemplateMC2TypeFunc>::BuffInit()
 {
     tpipe_->Reset();
-    tpipe_->InitBuffer(readStateBuf_, UB_ALIGN);  // 32
+    tpipe_->InitBuffer(readStateBuf_, UB_ALIGN);
     uint32_t sendNumAlign = Ceil(moeSendNum_ * sizeof(int32_t), UB_ALIGN) * UB_ALIGN;
-    tpipe_->InitBuffer(sendCountBuf_, sendNumAlign);  // epWorldSize_ * moeExpertPerRankNum_ * 4
+    tpipe_->InitBuffer(sendCountBuf_, sendNumAlign);
     if constexpr (IsNeedReduceScatter) {
-        tpipe_->InitBuffer(winTpSendCountInQueue_, BUFFER_NUM, axisHExpandXTypeSize_);  // 28K
-        tpipe_->InitBuffer(gmTpSendCountInQueue_, BUFFER_NUM, axisHExpandXTypeSize_);   // 28K
-        tpipe_->InitBuffer(xOutQueue_, BUFFER_NUM, axisHExpandXTypeSize_);              // 28K
+        tpipe_->InitBuffer(winTpSendCountInQueue_, BUFFER_NUM, axisHExpandXTypeSize_);
+        tpipe_->InitBuffer(gmTpSendCountInQueue_, BUFFER_NUM, axisHExpandXTypeSize_);
+        tpipe_->InitBuffer(xOutQueue_, BUFFER_NUM, axisHExpandXTypeSize_);
         if constexpr (AscendC::IsSameType<ExpandXType, bfloat16_t>::value) {
             tpipe_->InitBuffer(winTpSendCountFloatBuf_, axisHFloatSize_);
             tpipe_->InitBuffer(gmTpSendCountFloatBuf_, axisHFloatSize_);
@@ -367,7 +371,7 @@ __aicore__ inline void CamMoeDistributeCombine<TemplateMC2TypeFunc>::BuffInit()
             gmTpSendCountFloatTensor_ = gmTpSendCountFloatBuf_.Get<float>();
         }
     } else {
-        tpipe_->InitBuffer(gmTpSendCountQueue_, BUFFER_NUM, axisHExpandXTypeSize_);  // 28K
+        tpipe_->InitBuffer(gmTpSendCountQueue_, BUFFER_NUM, axisHExpandXTypeSize_);
     }
     epSendCountLocal_ = sendCountBuf_.Get<int32_t>();
 }
@@ -376,20 +380,20 @@ template <TemplateMC2TypeClass>
 __aicore__ inline void CamMoeDistributeCombine<TemplateMC2TypeFunc>::AlltoAllBuffInit()
 {
     tpipe_->Reset();
-    uint32_t bsMulTopkSizeAligned = Ceil(axisBS_ * axisK_ * sizeof(int32_t), UB_ALIGN) * UB_ALIGN;  // 防止UB不对齐
+    uint32_t bsMulTopkSizeAligned = Ceil(axisBS_ * axisK_ * sizeof(int32_t), UB_ALIGN) * UB_ALIGN;
     tpipe_->InitBuffer(readStateBuf_, UB_ALIGN);
     tpipe_->InitBuffer(statusBuf_, sendRankNum_ * UB_ALIGN);
     tpipe_->InitBuffer(expertIdsBuf_, bsMulTopkSizeAligned);
     tpipe_->InitBuffer(expandScalesBuf_, bsMulTopkSizeAligned);
     tpipe_->InitBuffer(tokenBuf_, axisH_ * sizeof(ExpandXType));
-    tpipe_->InitBuffer(rowTmpFloatBuf_, axisHFloatSize_);  // 7168 * 4 = 28672
-    tpipe_->InitBuffer(mulBuf_, axisHFloatSize_);          // 7168 * 4 = 28672
-    tpipe_->InitBuffer(sumFloatBuf_, axisHFloatSize_);     // 7168 * 4 = 28672
+    tpipe_->InitBuffer(rowTmpFloatBuf_, axisHFloatSize_);
+    tpipe_->InitBuffer(mulBuf_, axisHFloatSize_);
+    tpipe_->InitBuffer(sumFloatBuf_, axisHFloatSize_);
     tpipe_->InitBuffer(indexCountsBuf_, bsMulTopkSizeAligned);
     tpipe_->InitBuffer(moeSumQueue_, BUFFER_NUM, axisHExpandXTypeSize_);
     tpipe_->InitBuffer(gatherMaskOutBuf_, epWorldSize_ * sizeof(float));
-    tpipe_->InitBuffer(gatherTmpBuf_, sizeof(uint32_t));  // 4
-    tpipe_->InitBuffer(statusSumOutBuf_, sizeof(float));  // 4
+    tpipe_->InitBuffer(gatherTmpBuf_, sizeof(uint32_t));
+    tpipe_->InitBuffer(statusSumOutBuf_, sizeof(float));
 }
 
 template <TemplateMC2TypeClass>
@@ -441,8 +445,6 @@ __aicore__ inline void CamMoeDistributeCombine<TemplateMC2TypeFunc>::ReduceScatt
     }
 }
 
-// 46 -> gm -> ub syncall win->gm add -> alltoall
-// 2 -> win wait syncall gm -> ub win ->gm add -> alltoall
 template <TemplateMC2TypeClass>
 __aicore__ inline void CamMoeDistributeCombine<TemplateMC2TypeFunc>::SetWaitTpStatusAndDisPatch()
 {
@@ -463,7 +465,7 @@ __aicore__ inline void CamMoeDistributeCombine<TemplateMC2TypeFunc>::SetWaitTpSt
         SyncFunc<AscendC::HardEvent::MTE3_S>();
         LocalTensor<float> statusFp32Tensor_ = readStateBuf_.Get<float>();
         float sumOfFlag = static_cast<float>(-1.0);
-        uint32_t statusRankOffset = coreIdx_ * stateOffset_ / sizeof(float);  // tp = 2
+        uint32_t statusRankOffset = coreIdx_ * stateOffset_ / sizeof(float);
         while (sumOfFlag != sumTarget_) {
             DataCopy<float>(statusFp32Tensor_, tpStatusSpaceGlobalTensor_[statusRankOffset], 8);
             SyncFunc<AscendC::HardEvent::MTE2_S>();
@@ -471,7 +473,6 @@ __aicore__ inline void CamMoeDistributeCombine<TemplateMC2TypeFunc>::SetWaitTpSt
             SyncFunc<AscendC::HardEvent::S_MTE2>();
         }
     }
-    // Copy win gm->ub add ->alltoall send
     ExpertAlltoAllDispatchCopyAdd();
     SyncFunc<AscendC::HardEvent::MTE3_S>();
 }
@@ -737,7 +738,7 @@ __aicore__ inline void CamMoeDistributeCombine<TemplateMC2TypeFunc>::LocalWindow
             AscendC::PipeBarrier<PIPE_V>();
             AscendC::Add(sumFloatBufLocal, sumFloatBufLocal, rowTmpFloatLocal, processLen);
         }
-        // 结果搬出
+
         AscendC::PipeBarrier<PIPE_V>();
         LocalTensor<ExpandXType> sumBufLocal = tokenBuf_.Get<ExpandXType>();
         Cast(sumBufLocal, sumFloatBufLocal, AscendC::RoundMode::CAST_RINT, processLen);
@@ -751,7 +752,7 @@ __aicore__ inline void CamMoeDistributeCombine<TemplateMC2TypeFunc>::Process()
 {
     SyncAll<true>();
     if constexpr (IsNeedReduceScatter) {
-        tpipe_->InitBuffer(moeQueue_, BUFFER_NUM, axisHExpandXTypeSize_);  // 7168 * 2 * 2 = 28672
+        tpipe_->InitBuffer(moeQueue_, BUFFER_NUM, axisHExpandXTypeSize_);
         ReduceScatterTrans();
     }
     if constexpr ((EXEC_FLAG & EXEC_FLAG_DEEP_FUSE) == 0) {
@@ -768,7 +769,7 @@ template <TemplateMC2TypeClass>
 __aicore__ inline void CamMoeDistributeCombine<TemplateMC2TypeFunc>::AllToAllSend()
 {
     if constexpr (IsNeedReduceScatter) {
-        tpipe_->InitBuffer(moeQueue_, BUFFER_NUM, axisHExpandXTypeSize_);  // 7168 * 2 * 2 = 28672
+        tpipe_->InitBuffer(moeQueue_, BUFFER_NUM, axisHExpandXTypeSize_);
         ReduceScatterTrans();
     }
     BuffInit();

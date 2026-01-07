@@ -32,8 +32,6 @@
 #include "fused_deep_moe_tiling.h"
 #include "fused_deep_moe_base.h"
 
-#define ENABLE_GMM2_COMBINE
-
 using namespace Catlass;
 
 using MmadAtlasA2Custom =
@@ -343,17 +341,6 @@ __aicore__ inline void FusedDeepMoe<TemplateMC2TypeFunc>::Init(
 template <TemplateMC2TypeClass>
 __aicore__ inline void FusedDeepMoe<TemplateMC2TypeFunc>::Process()
 {
-#ifdef ENABLE_GMM2_COMBINE
-    if (g_coreType == AscendC::AIV) {
-        ((FusedDeepMoeTilingData *)tilingData_)->disGmmDeqSwigluQuantGmmDeqComInfo.aicNum = get_block_num();
-        if constexpr (EXEC_FLAG & EXEC_FLAG_DEEP_FUSE) {
-            ((FusedDeepMoeTilingData *)tilingData_)->disGmmDeqSwigluQuantGmmDeqComInfo.aivNum = get_block_num();
-        } else {
-            ((FusedDeepMoeTilingData *)tilingData_)->disGmmDeqSwigluQuantGmmDeqComInfo.aivNum =
-                get_block_num() * get_subblockdim();
-        }
-    }
-#endif
     GemmCoord gmm1ProblemShape{m_, n_, k_};
     GemmCoord gmm2ProblemShape{m_, n2_, k2_};
 
@@ -423,7 +410,7 @@ __aicore__ inline void FusedDeepMoe<TemplateMC2TypeFunc>::Process()
         layoutPerTokenScale2, gmWorkspace, gmX_, gmSmoothScales_, gmexpertIds_, gmExpandIdx, gmEpSendCount, gmResvered,
         gmExpertTokenNums_, epRankSize_, epRankId_, moeExpertNum_, moeExpertNumPerRank_, sharedExpertNum_,
         sharedExpertRankNum_, quantMode_, globalBs_, bs_, topK_, k_);
-#ifdef ENABLE_GMM2_COMBINE
+
     AscendC::PipeBarrier<PIPE_ALL>();
     Arch::CrossCoreFlag gmm1AivFinished{0};
     if constexpr (g_coreType == AscendC::AIV) {
@@ -442,6 +429,5 @@ __aicore__ inline void FusedDeepMoe<TemplateMC2TypeFunc>::Process()
            Gmm2DispatchPolicy>(gmm2ProblemShape, groupCount_, gmGroupList, gmX2, layoutX2, gmWeight2_, layoutWeight2,
                                gmScale2_, layoutScale2, gmPerTokenScale2, layoutPerTokenScale2, gmGmm2DepOut,
                                layoutOutput, gmWorkspace, &combiner);
-#endif
 }
 #endif  // FUSED_DEEP_MOE_H

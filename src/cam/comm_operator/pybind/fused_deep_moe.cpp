@@ -66,31 +66,16 @@ std::vector<at::Tensor> fused_deep_moe_impl_npu(
     group_ep_chrs.push_back('\0');
     char *group_ep_ptr = &group_ep_chrs[0];
     
-    if (bs != 0) {
-        at::Tensor output = at::empty({bs, h}, x.options());
-        // 必须要求对齐fused_deep_moe.cpp 先input 跟着 attr, 然后output
-        EXEC_NPU_CMD(aclnnFusedDeepMoe,
-            // input
-            x, expertIds, gmm1PermutedWeight, gmm1PermutedWeightScale, gmm2Weight, gmm2WeightScale, \
-            expertSmoothScalesOptional, expertScalesOptional, \
-            // attr
-            group_ep_ptr, epRankSize, epRankId, moeExpertNum, sharedExpertNum, sharedExpertRankNum, quantMode, globalBs, \
-            // output
-            output, expert_token_nums);
-        return {output, expert_token_nums};
-    } else {
-        at::Tensor output_padding = at::empty({1, h}, x.options());
-        at::Tensor output = at::empty({0, h}, x.options());
-        EXEC_NPU_CMD(aclnnFusedDeepMoe,
-            // input
-            x, expertIds, gmm1PermutedWeight, gmm1PermutedWeightScale, gmm2Weight, gmm2WeightScale, \
-            expertSmoothScalesOptional, expertScalesOptional, \
-            // attr
-            group_ep_ptr, epRankSize, epRankId, moeExpertNum, sharedExpertNum, sharedExpertRankNum, quantMode, globalBs, \
-            // output
-            output_padding, expert_token_nums);
-        return {output, expert_token_nums};
-    }
+    // 必须要求对齐fused_deep_moe.cpp 先input 跟着 attr, 然后output
+    EXEC_NPU_CMD(aclnnFusedDeepMoe,
+        // input
+        x, expertIds, gmm1PermutedWeight, gmm1PermutedWeightScale, gmm2Weight, gmm2WeightScale, \
+        expertSmoothScalesOptional, expertScalesOptional, \
+        // attr
+        group_ep_ptr, epRankSize, epRankId, moeExpertNum, sharedExpertNum, sharedExpertRankNum, quantMode, globalBs, \
+        // output
+        output, expert_token_nums);
+    return {output, expert_token_nums};
 }
 
 std::vector<at::Tensor> fused_deep_moe_backward_impl_npu(const at::Tensor &self)

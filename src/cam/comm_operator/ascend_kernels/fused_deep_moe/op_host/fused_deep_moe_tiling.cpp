@@ -17,14 +17,13 @@
 #include "tiling/platform/platform_ascendc.h"
 #include "tiling/hccl/hccl_tiling.h"
 
-#define GM_ALIGN_SIZE 512
 
 using namespace ge;
 namespace {
 constexpr uint32_t OP_TYPE_ALL_TO_ALL = 8;
 constexpr uint32_t SYSTEM_NEED_WORKSPACE = 16 * 1024 * 1024;
+constexpr uint32_t GM_ALIGN_SIZE = 512;
 constexpr uint32_t TOKEN_DTYPE_BYTE_SIZE = 2;
-constexpr uint32_t USE_CORE_NUM = 24;
 constexpr uint32_t L1_TILE_BYTE_SIZE = 32 * 1024;
 constexpr uint32_t CUBE_WORKSPACE_STAGE = 4;
 constexpr uint32_t RESERVED_WORKSPACE_SIZE = 256 * 1024;
@@ -50,10 +49,9 @@ constexpr uint32_t ATTR_GLOBAL_BS_INDEX = 7;
 constexpr uint32_t MIN_BATCH_SIZE = 0;
 constexpr uint32_t MAX_BATCH_SIZE = 256;
 constexpr uint32_t MAX_MOE_EXERT_NUM = 512;
-constexpr uint32_t RECV_AIV_NUM = 24;
 constexpr uint32_t SUPPORT_TOP_K = 12;
 constexpr uint32_t TWO_DIMS = 2;
-constexpr uint32_t MIN_TOKEN_LENGTH = 512;
+constexpr uint32_t MIN_TOKEN_LENGTH = 1024;
 constexpr uint32_t MAX_TOKEN_LENGTH = 7168;
 constexpr uint32_t MIN_GMM1_HIDDEN = 1024;
 constexpr uint32_t MAX_GMM1_HIDDEN = 6144;
@@ -281,9 +279,15 @@ static ge::graphStatus CheckData(const char *nodeName, FusedDeepMoeTilingData &t
     } else {
         OP_TILING_CHECK(globalBatchSize < 0, OP_LOGE(nodeName, "globalBatchSize must >= 0."), return ge::GRAPH_FAILED);
         OP_TILING_CHECK(globalBatchSize % epRankSize > 0,
-                        OP_LOGE(nodeName, "globalBatchSize must be divisible by epRankSize."), return ge::GRAPH_FAILED);
+                        OP_LOGE(nodeName, "globalBatchSize must be divisible by epRankSize."),
+                        return ge::GRAPH_FAILED);
     }
-
+    uint32_t moeExpertNumPerRank = tilingData.disGmmDeqSwigluQuantGmmDeqComInfo.moeExpertNumPerRank;
+    uint32_t recvAivNum = tilingData.disGmmDeqSwigluQuantGmmDeqComInfo.aivNum / 2;
+    OP_TILING_CHECK(
+        moeExpertNumPerRank > recvAivNum,
+        OP_LOGE(nodeName, "moeExpertNumPerRank must <= (aivNum/2)(%u), but got %u", recvAivNum, moeExpertNumPerRank),
+        return ge::GRAPH_FAILED);
     return ge::GRAPH_SUCCESS;
 }
 
@@ -318,8 +322,6 @@ static ge::graphStatus GetAttrAndSetTilingData(gert::TilingContext *context, con
     OP_TILING_CHECK(moeExpertNum % (epRankSize - sharedExpertRankNum) != 0,
                     OP_LOGE(nodeName, "moeExpertNum must be divisible by (epRankSize - sharedExpertRankNum)."),
                     return ge::GRAPH_FAILED);
-    OP_TILING_CHECK(moeExpertNumPerRank > RECV_AIV_NUM,
-                    OP_LOGE(nodeName, "moeExpertNumPerRank must <= %d.", RECV_AIV_NUM), return ge::GRAPH_FAILED);
 
     groupEp = std::string(groupEpPtr);
     tilingData.disGmmDeqSwigluQuantGmmDeqComInfo.epRankSize = epRankSize;
@@ -361,6 +363,7 @@ static ge::graphStatus SetWorkSpace(gert::TilingContext *context, const char *no
     uint32_t topK = tilingData.disGmmDeqSwigluQuantGmmDeqComInfo.k;
     uint32_t moeExpertNumPerRank = tilingData.disGmmDeqSwigluQuantGmmDeqComInfo.moeExpertNumPerRank;
     uint32_t h = tilingData.disGmmDeqSwigluQuantGmmDeqComInfo.h;
+    uint32_t aicNum = tilingData.disGmmDeqSwigluQuantGmmDeqComInfo.aicNum;
     uint64_t gmm2HLen = tilingData.disGmmDeqSwigluQuantGmmDeqComInfo.gmm1HLen / 2;
     if (epRankId < sharedExpertRankNum) {
         maxTokenNum = maxBatchSize * epRankSize / sharedExpertRankNum;
@@ -371,7 +374,7 @@ static ge::graphStatus SetWorkSpace(gert::TilingContext *context, const char *no
     size_t x2TokenSize = CeilUp(maxTokenNum * gmm2HLen * sizeof(int8_t), GM_ALIGN_SIZE);
     size_t x2ScaleSize = CeilUp(maxTokenNum * sizeof(float), GM_ALIGN_SIZE);
     size_t CVSwapBufferSize =
-        CeilUp(USE_CORE_NUM * L1_TILE_BYTE_SIZE * CUBE_WORKSPACE_STAGE * sizeof(int32_t), GM_ALIGN_SIZE);
+        CeilUp(aicNum * L1_TILE_BYTE_SIZE * CUBE_WORKSPACE_STAGE * sizeof(int32_t), GM_ALIGN_SIZE);
     size_t swigluOutSize = CeilUp(maxTokenNum * gmm2HLen * sizeof(float), GM_ALIGN_SIZE);
     size_t groupListSize = CeilUp(moeExpertNumPerRank * sizeof(int64_t), GM_ALIGN_SIZE);
     size_t expandIdxSize = CeilUp(batchSize * topK * sizeof(int32_t), GM_ALIGN_SIZE);
@@ -411,6 +414,10 @@ static ge::graphStatus FusedDeepMoeTilingFuncImpl(gert::TilingContext *context)
     OP_TILING_CHECK(expertIdsStorageShape->GetStorageShape().GetDimNum() != TWO_DIMS,
                     OP_LOGE(nodeName, "expertIds shape dims must be 2, but current dim num is %lu.",
                             expertIdsStorageShape->GetStorageShape().GetDimNum()),
+                    return ge::GRAPH_FAILED);
+    OP_TILING_CHECK(expertIdsStorageShape->GetStorageShape().GetDim(0) != batchSize,
+                    OP_LOGE(nodeName, "expertIds dim 0 must be batchSize(%lu), but get %lu.",
+                            batchSize, expertIdsStorageShape->GetStorageShape().GetDim(0)),
                     return ge::GRAPH_FAILED);
     const int64_t topK = expertIdsStorageShape->GetStorageShape().GetDim(1);
     tilingData->disGmmDeqSwigluQuantGmmDeqComInfo.k = topK;
