@@ -22,11 +22,23 @@ import torch.multiprocessing as mp
 import torch_npu
 import torchair
 
-# 导入CAM算子库。导入前请保证算子库已经正确安装。
 import umdk_cam_op_lib
 
+torch.manual_seed(42)
 torch_npu.npu.config.allow_internal_format = True
 LOG_NAME = "fused_deep_moe_sample_logs"
+BASE_KWARGS = {
+    "batch_size": 64,
+    "token_hidden_size": 7168,
+    "moe_intermediate_size": 2048,
+    "ep_world_size": 16,
+    "moe_expert_num": 64,
+    "shared_expert_rank_num": 0,
+    "top_k": 8,
+    "test_bfloat16": True,
+    "enable_dynamic_bs": False,
+    "dynamic_eplb": False
+}
 
 
 def redirect_output(log_file_path):
@@ -44,20 +56,6 @@ def permute_weight(w: torch.Tensor, tile_n):
     return w.reshape(*dims, 2, n // tile_n,
                      tile_n // 2).permute(order).reshape(*dims,
                                                          n).contiguous()
-
-
-def from_inclusive_prefix_sum(pref):
-    if isinstance(pref, torch.Tensor):
-        if pref.numel() == 0:
-            return pref
-        return torch.cat([pref[:1], pref[1:] - pref[:-1]])
-
-    if not pref:
-        return []
-    out = [pref[0]]
-    for i in range(1, len(pref)):
-        out.append(pref[i] - pref[i - 1])
-    return out
 
 
 def output_to_file(rank_id):
@@ -78,7 +76,8 @@ class DecodeMoeOps(torch.nn.Module):
                  ep_world_size,
                  moe_expert_num,
                  global_rank_id,
-                 shared_expert_rank_num=0):
+                 shared_expert_rank_num=0,
+                 dynamic_eplb=False):
         super().__init__()
         self.ep_hcomm_info = ep_hcomm_info
         self.batch_size = batch_size
@@ -93,24 +92,39 @@ class DecodeMoeOps(torch.nn.Module):
                                                      shared_expert_rank_num)
         self.local_expert_num = 1 if is_shared_expert else moe_expert_num_per_rank
         self.ep_recv_count_size = self.local_expert_num * ep_world_size
-        self.gmm1_weight = torch.empty([ 
-            self.local_expert_num, self.token_hidden_size, 
-            self.moe_intermediate_size * 2 
+        self.dynamic_eplb = dynamic_eplb
+        self.gmm1_weight = torch.empty([
+            self.local_expert_num, self.token_hidden_size,
+            self.moe_intermediate_size * 2
         ])
-        self.gmm1_weight_scale = torch.empty( 
+        self.gmm1_weight_scale = torch.empty(
             [self.local_expert_num, self.moe_intermediate_size * 2])
-        self.gmm2_weight = torch.empty([ 
-            self.local_expert_num, self.moe_intermediate_size, 
-            self.token_hidden_size 
+        self.gmm2_weight = torch.empty([
+            self.local_expert_num, self.moe_intermediate_size,
+            self.token_hidden_size
         ])
-        self.gmm2_weight_scale = torch.empty( 
+        self.gmm2_weight_scale = torch.empty(
             [self.local_expert_num, self.token_hidden_size])
         self._process_weights_after_loading(gmm1_weight, gmm1_weight_scale,
                                             gmm2_weight, gmm2_weight_scale)
 
     def _process_weights_after_loading(self, gmm1_weight, gmm1_weight_scale,
                                        gmm2_weight, gmm2_weight_scale):
-        raise NotImplementedError("To be implemented in subclass")
+        gmm1_weight = torch_npu.npu_format_cast(gmm1_weight,
+                                                torch_npu.Format.FRACTAL_NZ)
+        gmm2_weight = torch_npu.npu_format_cast(gmm2_weight,
+                                                torch_npu.Format.FRACTAL_NZ)
+        self.gmm1_weight = torch.nn.Parameter(gmm1_weight, requires_grad=False)
+        self.gmm1_weight_scale = torch.nn.Parameter(gmm1_weight_scale,
+                                                    requires_grad=False)
+        self.gmm2_weight = torch.nn.Parameter(gmm2_weight, requires_grad=False)
+        self.gmm2_weight_scale = torch.nn.Parameter(gmm2_weight_scale,
+                                                    requires_grad=False)
+
+        self.gmm1_weight_scale_fp32 = torch.nn.Parameter(
+            gmm1_weight_scale.float(), requires_grad=False)
+        self.gmm2_weight_scale_fp32 = torch.nn.Parameter(
+            gmm2_weight_scale.float(), requires_grad=False)
 
     def _apply_ops(self, x, expert_ids, smooth_scales, expert_scales):
         raise NotImplementedError("To be implemented in subclass")
@@ -133,26 +147,14 @@ class SmallOps(DecodeMoeOps):
                  ep_world_size,
                  moe_expert_num,
                  global_rank_id,
-                 shared_expert_rank_num=0):
+                 shared_expert_rank_num,
+                 dynamic_eplb=False):
         super().__init__(gmm1_weight, gmm1_weight_scale, gmm2_weight,
                          gmm2_weight_scale, ep_hcomm_info, batch_size,
                          token_hidden_size, moe_intermediate_size,
                          ep_world_size, moe_expert_num, global_rank_id,
-                         shared_expert_rank_num)
+                         shared_expert_rank_num, dynamic_eplb)
         self.tp_hcomm_info = ""
-
-    def _process_weights_after_loading(self, gmm1_weight, gmm1_weight_scale,
-                                       gmm2_weight, gmm2_weight_scale):
-        gmm1_weight = torch_npu.npu_format_cast(gmm1_weight,
-                                                torch_npu.Format.FRACTAL_NZ)
-        gmm2_weight = torch_npu.npu_format_cast(gmm2_weight,
-                                                torch_npu.Format.FRACTAL_NZ)
-        self.gmm1_weight = torch.nn.Parameter(gmm1_weight, requires_grad=False)
-        self.gmm1_weight_scale = torch.nn.Parameter(gmm1_weight_scale,
-                                                    requires_grad=False)
-        self.gmm2_weight = torch.nn.Parameter(gmm2_weight, requires_grad=False)
-        self.gmm2_weight_scale = torch.nn.Parameter(gmm2_weight_scale,
-                                                    requires_grad=False)
 
     def _apply_ops(self, x, expert_ids, smooth_scales, expert_scales):
         outputs = torch_npu.npu_moe_distribute_dispatch_v2(
@@ -223,7 +225,7 @@ class SmallOps(DecodeMoeOps):
             shared_expert_num=1,
             shared_expert_rank_num=self.shared_expert_rank_num,
             global_bs=self.batch_size * self.ep_world_size)
-        return (combine_output, ep_send_counts[:self.ep_recv_count_size])
+        return (combine_output, expert_token_nums)
 
 
 class FusionOp(DecodeMoeOps):
@@ -240,12 +242,33 @@ class FusionOp(DecodeMoeOps):
                  ep_world_size,
                  moe_expert_num,
                  global_rank_id,
-                 shared_expert_rank_num=0):
+                 shared_expert_rank_num=0,
+                 dynamic_eplb=False):
         super().__init__(gmm1_weight, gmm1_weight_scale, gmm2_weight,
                          gmm2_weight_scale, ep_hcomm_info, batch_size,
                          token_hidden_size, moe_intermediate_size,
                          ep_world_size, moe_expert_num, global_rank_id,
-                         shared_expert_rank_num)
+                         shared_expert_rank_num, dynamic_eplb)
+
+    def _apply_ops(self, x, expert_ids, smooth_scales, expert_scales):
+        output, expert_token_nums = torch.ops.umdk_cam_op_lib.fused_deep_moe(
+            x=x,
+            expertIds=expert_ids,
+            gmm1PermutedWeight=self.gmm1_weight,
+            gmm1PermutedWeightScale=self.gmm1_weight_scale_fp32,
+            gmm2Weight=self.gmm2_weight,
+            gmm2WeightScale=self.gmm2_weight_scale_fp32,
+            expertSmoothScalesOptional=smooth_scales,
+            expertScalesOptional=expert_scales,
+            groupEp=self.ep_hcomm_info,
+            epRankSize=self.ep_world_size,
+            epRankId=self.global_rank_id,
+            moeExpertNum=self.moe_expert_num,
+            sharedExpertNum=1,
+            sharedExpertRankNum=self.shared_expert_rank_num,
+            quantMode=0,
+            globalBs=self.batch_size * self.ep_world_size)
+        return (output, expert_token_nums)
 
     def _process_weights_after_loading(self, gmm1_weight, gmm1_weight_scale,
                                        gmm2_weight, gmm2_weight_scale):
@@ -260,40 +283,29 @@ class FusionOp(DecodeMoeOps):
         gmm1_weight = torch_npu.npu_format_cast(gmm1_weight,
                                                 torch_npu.Format.FRACTAL_NZ)
         gmm1_weight_scale = permute_weight(gmm1_weight_scale, 128)
-        gmm2_weight = torch_npu.npu_format_cast(
-            gmm2_weight.transpose(1, 2).contiguous(),
-            torch_npu.Format.FRACTAL_NZ)
-
+        gmm2_weight = torch_npu.npu_format_cast(gmm2_weight.transpose(1, 2).contiguous(),
+                                                torch_npu.Format.FRACTAL_NZ)
         gmm1_weight_scale = gmm1_weight_scale.float()
         gmm2_weight_scale = gmm2_weight_scale.float()
 
-        self.gmm1_weight = torch.nn.Parameter(gmm1_weight, requires_grad=False)
-        self.gmm1_weight_scale = torch.nn.Parameter(gmm1_weight_scale,
-                                                    requires_grad=False)
-        self.gmm2_weight = torch.nn.Parameter(gmm2_weight, requires_grad=False)
-        self.gmm2_weight_scale = torch.nn.Parameter(gmm2_weight_scale,
-                                                    requires_grad=False)
-
-    def _apply_ops(self, x, expert_ids, smooth_scales, expert_scales):
-        output, recv_count = torch.ops.umdk_cam_op_lib.fused_deep_moe(
-            x=x,
-            expertIds=expert_ids,
-            gmm1PermutedWeight=self.gmm1_weight,
-            gmm1PermutedWeightScale=self.gmm1_weight_scale,
-            gmm2Weight=self.gmm2_weight,
-            gmm2WeightScale=self.gmm2_weight_scale,
-            expertSmoothScalesOptional=smooth_scales,
-            expertScalesOptional=expert_scales,
-            groupEp=self.ep_hcomm_info,
-            epRankSize=self.ep_world_size,
-            epRankId=self.global_rank_id,
-            moeExpertNum=self.moe_expert_num,
-            sharedExpertNum=1,
-            sharedExpertRankNum=self.shared_expert_rank_num,
-            quantMode=0,
-            globalBs=self.batch_size * self.ep_world_size)
-        return (output, recv_count)
-
+        if self.dynamic_eplb:
+            self.gmm1_weight = [
+                weight.clone() for weight in gmm1_weight.unbind(dim=0)
+            ]
+            self.gmm1_weight_scale_fp32 = [
+                weight.clone() for weight in gmm1_weight_scale.unbind(dim=0)
+            ]
+            self.gmm2_weight = [
+                weight.clone() for weight in gmm2_weight.unbind(dim=0)
+            ]
+            self.gmm2_weight_scale_fp32 = [
+                weight.clone() for weight in gmm2_weight_scale.unbind(dim=0)
+            ]
+        else:
+            self.gmm1_weight = [gmm1_weight.clone()]
+            self.gmm1_weight_scale_fp32 = [gmm1_weight_scale.clone()]
+            self.gmm2_weight = [gmm2_weight.clone()]
+            self.gmm2_weight_scale_fp32 = [gmm2_weight_scale.clone()]
 
 def generate_datas(batch_size,
                    token_hidden_size,
@@ -368,7 +380,8 @@ def run_once(local_rank_id,
              shared_expert_rank_num=0,
              top_k=8,
              test_bfloat16=True,
-             enable_dynamic_bs=False):
+             enable_dynamic_bs=False,
+             dynamic_eplb=False):
     # 配置日志输出文件名
     log_file = redirect_output(f"local_rank_{local_rank_id}.log"
                                ) if output_to_file(local_rank_id) else None
@@ -407,9 +420,9 @@ def run_once(local_rank_id,
     ]
 
     small_ops = SmallOps(*weight_datas, ep_hcomm_info_small,
-                         *parameter).npu()  # type: ignore
+                         *parameter, dynamic_eplb).npu()  # type: ignore
     fused_ops = FusionOp(*weight_datas, ep_hcomm_info_fused,
-                         *parameter).npu()  # type: ignore
+                         *parameter, dynamic_eplb).npu()  # type: ignore
     small_op_token_output, small_op_count_output = small_ops(*input_datas)
     fused_op_token_output, fused_op_count_output = fused_ops(*input_datas)
     torch_npu.npu.synchronize(device_id)
@@ -418,7 +431,7 @@ def run_once(local_rank_id,
     dist.destroy_process_group()
     if log_file is not None:
         log_file.close()
-    small_op_count_output = from_inclusive_prefix_sum(small_op_count_output)
+
     torch.testing.assert_close(small_op_token_output.cpu(),
                                fused_op_token_output.cpu(),
                                atol=2.0,
@@ -431,20 +444,23 @@ def run_once(local_rank_id,
 
 
 @torch.inference_mode()
-def test():
-    batch_size = 64
-    token_hidden_size = 7168
-    moe_intermediate_size = 2048
-    ep_world_size = 16
-    moe_expert_num = 64
-    shared_expert_rank_num = 0
-    top_k = 8
-    test_bfloat16 = True
-    enable_dynamic_bs = False
-    args = (batch_size, token_hidden_size, moe_intermediate_size,
-            ep_world_size, moe_expert_num, shared_expert_rank_num, top_k,
-            test_bfloat16, enable_dynamic_bs)
-    mp.spawn(run_once, args=args, nprocs=ep_world_size, join=True)
+def test_fused_deep_moe_base():
+    custom_kwargs = BASE_KWARGS
+    ep_world_size = custom_kwargs["ep_world_size"]
+    custom_args = tuple(custom_kwargs.values())
+    mp.spawn(run_once, args=custom_args, nprocs=ep_world_size, join=True)
+
+
+@torch.inference_mode()
+def test_fused_deep_moe_eplb():
+    custom_kwargs = BASE_KWARGS
+    custom_kwargs["dynamic_eplb"] = True
+    ep_world_size = custom_kwargs["ep_world_size"]
+    custom_args = tuple(custom_kwargs.values())
+    mp.spawn(run_once, args=custom_args, nprocs=ep_world_size, join=True)
+
+
 
 if __name__ == "__main__":
-    test()
+    test_fused_deep_moe_base()
+    # test_fused_deep_moe_eplb()

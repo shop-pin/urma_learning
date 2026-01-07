@@ -19,10 +19,10 @@
 std::vector<at::Tensor> fused_deep_moe_impl_autograd(
     const at::Tensor &x, \
     const at::Tensor &expertIds, \
-    const at::TensorList &gmm1_permuted_weight, \
-    const at::TensorList &gmm1_permuted_weight_scale, \
-    const at::TensorList &gmm2_weight, \
-    const at::TensorList &gmm2_weight_scale, \
+    const at::TensorList &gmm1PermutedWeight, \
+    const at::TensorList &gmm1PermutedWeightScale, \
+    const at::TensorList &gmm2Weight, \
+    const at::TensorList &gmm2WeightScale, \
     const c10::optional<at::Tensor> &expertSmoothScalesOptional, \
     const c10::optional<at::Tensor> &expertScalesOptional, \
     c10::string_view groupEp, \
