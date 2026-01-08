@@ -1,10 +1,10 @@
 /*
  * SPDX-License-Identifier: MIT
  * Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
- * Description: add functions
+ * Description: pybind functions header file
  * Create: 2025-12-10
  * Note:
- * History: 2025-12-10 add functions
+ * History: 2025-12-10 add pybind functions header file
  */
 
 #ifndef COMMON_OPS_CSRC_FUNCTIONS_H_
@@ -35,38 +35,33 @@ std::vector<at::Tensor> fused_deep_moe_impl_autograd(
     int64_t globalBs);
 
 std::tuple<at::Tensor, at::Tensor, at::Tensor>
-moe_dispatch_normal_impl_autograd(
-    const at::Tensor &x, \
-    const at::Tensor &topkIdx, \
-    const at::Tensor &sendOffset, \
-    const at::Tensor &sendTokenIdx, \
-    const at::Tensor &recvOffset, \
-    const at::Tensor &recvCount, \
-    c10::string_view groupEp, \
-    int64_t epWorldSize, \
-    int64_t epRankId, \
-    c10::string_view groupTp, \
-    int64_t tpWorldSize, \
-    int64_t tpRankId, \
-    int64_t moeExpertNum, \
-    int64_t quantMode, \
-    int64_t globalBs);
+GetDispatchLayoutImplAutograd(
+    const at::Tensor& topIdx,
+    int64_t numExperts,
+    int64_t numRanks);
 
-at::Tensor
-moe_combine_normal_impl_autograd(
-    const at::Tensor &recvX, \
-    const at::Tensor &tokenSrcInfo, \
-    const at::Tensor &epRecvCounts, \
-    const at::Tensor &recvTopkWeights, \
-    const c10::optional<at::Tensor> &tpRecvCounts, \
-    c10::string_view epGroupName, \
-    int64_t epWorldSize, \
-    int64_t epRankId, \
-    c10::string_view tpGroupName, \
-    int64_t tpWorldSize, \
-    int64_t tpRankId, \
-    int64_t moeExpertNum, \
-    int64_t globalBs);
+std::tuple<at::Tensor, at::Tensor, at::Tensor, at::Tensor>
+MoeDispatchPrefillImplAutograd(
+    const at::Tensor& x,
+    const at::Tensor& topkIdx,
+    const at::Tensor& topkWeights,
+    const at::Tensor& numTokensPerRank,
+    const at::Tensor& isTokenInRank,
+    at::Tensor& numTokensPerExpert,
+    int64_t numWorstTokens,
+    c10::string_view groupEp,
+    int64_t rank,
+    int64_t numRanks);
+
+at::Tensor MoeCombinePrefillImplAutograd(
+    const at::Tensor& x,
+    const at::Tensor& topkIdx,
+    const at::Tensor& topkWeights,
+    const at::Tensor& srcIdx,
+    const at::Tensor& sendHead,
+    c10::string_view groupEp,
+    int64_t rank,
+    int64_t numRanks);
 
 std::vector<at::Tensor> moe_dispatch_shmem_impl_autograd( \
     const at::Tensor &x, \
