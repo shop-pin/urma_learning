@@ -84,8 +84,6 @@ modprobe ums # if ums is required
 -  Add permissions
 ```bash
 # If you do not have the required permissions, you need to add them manually.
-chmod -R 777 /usr/lib64/urma
-chmod 777 /dev/ummu/tid
 chmod 755 /usr/lib64/liburma*
 ```
 
