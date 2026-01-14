@@ -1158,30 +1158,246 @@ typedef enum urma_transport_mode {
 
 ### 3.1 设备和上下文
 
-```c
-// 设备结构
-typedef struct urma_device {
-    char name[64];               // 设备名称，如 "udma0"
-    char path[4096];             // sysfs路径
-    urma_transport_type_t type;  // 传输类型
-    struct urma_provider_ops *ops;    // 驱动操作 (私有)
-    struct urma_sysfs_dev *sysfs_dev; // 内部设备 (私有)
-} urma_device_t;
+#### 3.1.1 urma_device_t - 设备结构
 
-// 上下文结构
+**urma_device是抽象概念吗？是什么硬件的抽象？**
+
+是的，`urma_device_t` 是一个**抽象的设备表示**。它不代表物理硬件，而是URMA库对底层硬件设备的抽象封装。
+
+**具体是什么硬件？**
+
+`urma_device` 是对**UDMA（UnifiedBus Direct Memory Access）硬件设备**的抽象。UDMA不是传统意义上的网卡，而是一种提供直接内存访问（DMA）能力的硬件I/O设备控制器。
+
+**UDMA硬件的特点：**
+- **类型**：硬件I/O设备控制器，提供DMA能力
+- **功能**：支持UnifiedBus协议，提供远程内存访问能力
+- **物理形态**：通过PCIe等接口连接到系统，在系统中显示为"UB network controller"（虽然名字包含network，但实际上是DMA控制器）
+- **支持的操作**：Read/Write（远程内存读写）、Send/Recv（消息传递）、原子操作等
+
+**类比说明：**
+- **传统网卡**：主要用于网络数据包的发送和接收
+- **UDMA设备**：更像是RDMA网卡，但专门用于UnifiedBus协议，提供硬件加速的远程内存访问能力
+
+**支持的硬件型号：**
+UDMA驱动支持多个硬件型号（通过Vendor ID和Device ID识别），例如：
+- Vendor ID: 0xCC08 (Huawei Technologies)
+- Device ID: 0xA001, 0xA002, 0xD802, 0xD803, 0xD80B, 0xD80C 等
+
+可以通过 `lsub` 命令查看系统中的UDMA设备。
+
+**设备发现和创建流程：**
+
+```
+内核驱动注册设备到sysfs
+        │
+        ▼
+URMA库扫描sysfs (/sys/class/ubcore)
+        │
+        ▼
+创建 urma_sysfs_dev (从sysfs读取设备信息)
+        │
+        ▼
+匹配Provider (根据vendor_id/device_id或driver_name)
+        │
+        ▼
+创建 urma_device (封装sysfs_dev和provider_ops)
+        │
+        ▼
+应用程序使用 urma_device 访问设备
+```
+
+**结构定义：**
+
+```c
+typedef struct urma_device {
+    char name[URMA_MAX_NAME];         // [公开] 设备名称
+    char path[URMA_MAX_PATH];         // [公开] 字符设备路径
+    urma_transport_type_t type;       // [公开] 传输类型
+    struct urma_provider_ops *ops;    // [私有] Provider操作接口
+    struct urma_sysfs_dev *sysfs_dev; // [私有] 内部设备信息
+} urma_device_t;
+```
+
+**字段详解：**
+
+| 字段 | 类型 | 可见性 | 说明 |
+|------|------|--------|------|
+| `name` | `char[64]` | [公开] | **设备名称**：URMA设备的名称标识符，例如 `"udma0"`。不同传输模式下的设备名称格式不同。<br><br>**主要用途**：<br>- 通过 `urma_get_device_by_name(name)` 查找设备<br>- 标识和区分不同的URMA设备<br>- 主要用于设备查找和标识，应用程序一般通过名称获取设备后使用设备指针 |
+| `path` | `char[4096]` | [公开] | **字符设备路径**：设备字符设备文件的路径，例如 `"/dev/uburma/udma0"`（注意：不是sysfs路径，而是/dev下的字符设备路径）。<br><br>**主要用途**：<br>- 用于打开设备文件（`open(path, O_RDWR)`），获取 `dev_fd`<br>- 在创建上下文时，通过 `dev_fd` 与内核驱动通信（ioctl）<br>- 用于设备属性查询、EID查询等需要内核交互的操作<br><br>**注意**：虽然字段名为"path"且注释提到sysfs，但实际存储的是 `/dev/uburma/设备名` 这样的字符设备路径 |
+| `type` | `urma_transport_type_t` | [公开] | **传输类型**：设备的传输类型，目前支持 `URMA_TRANSPORT_UB`（灵衢总线）。用于标识设备所属的传输协议栈。 |
+| `ops` | `struct urma_provider_ops *` | [私有] | **Provider操作接口**：指向Provider的操作函数表（`urma_provider_ops_t`），包含设备的初始化、查询设备属性、创建上下文等接口。<br><br>**什么是Provider？**<br>- Provider是URMA的**插件机制**，用于支持不同的硬件后端<br>- 不同的硬件（如UDMA）实现不同的Provider（`liburma-udma.so`）<br>- Provider通过 `urma_register_provider_ops()` 注册到URMA库<br>- 每个设备关联一个Provider，通过Provider的操作接口与硬件交互<br><br>**Provider接口包括**：<br>- `init()` / `uninit()`：初始化/反初始化<br>- `query_device()`：查询设备属性<br>- `create_context()` / `delete_context()`：创建/删除上下文<br><br>由URMA内部使用，应用程序不应直接访问。 |
+| `sysfs_dev` | `struct urma_sysfs_dev *` | [私有] | **内部设备信息**：指向 `urma_sysfs_dev_t` 结构，这是从sysfs文件系统读取的设备信息。<br><br>**什么是sysfs_dev？**<br>- `urma_sysfs_dev` 是URMA库从 `/sys/class/ubcore/设备名/` 读取的设备信息<br>- 包含设备的底层信息：设备名称、驱动名称、vendor_id、device_id、设备属性等<br>- `urma_device` 从 `urma_sysfs_dev` 创建，两者互相引用<br>- `sysfs_dev` 用于设备发现、匹配Provider、读取设备属性等内部操作<br><br>**sysfs_dev包含的信息**：<br>- `dev_name`：设备名称（从sysfs读取）<br>- `sysfs_path`：sysfs路径（如 `/sys/class/ubcore/udma0`）<br>- `driver_name`：驱动名称<br>- `vendor_id` / `device_id`：硬件厂商ID和设备ID（用于匹配Provider）<br>- `dev_attr`：设备属性（能力、限制等）<br><br>由URMA内部使用，应用程序不应直接访问。 |
+
+**使用示例：**
+
+```c
+// 1. 通过名称获取设备
+urma_device_t *dev = urma_get_device_by_name("udma0");
+
+// 2. 查询设备属性
+urma_device_attr_t dev_attr;
+urma_query_device(dev, &dev_attr);
+
+// 3. 访问设备信息（公开字段）
+printf("Device name: %s\n", dev->name);
+printf("Device path: %s\n", dev->path);
+printf("Transport type: %d\n", dev->type);
+```
+
+#### 3.1.2 urma_context_t - 上下文结构
+
+**urma_context和应用程序的关系：**
+
+`urma_context_t` 代表一个URMA上下文，是应用程序与URMA设备交互的核心对象。所有资源（Jetty、Segment等）都关联到某个上下文。
+
+**为什么需要context？context不存在不行吗？**
+
+**答案：必须要有context，没有context应用程序无法使用URMA功能。**
+
+**原因：**
+
+1. **所有资源创建都需要context**：应用程序要使用URMA功能，必须创建资源（Segment、Jetty等），而所有资源创建函数都要求传入context参数。没有context，无法创建任何资源。
+
+2. **所有数据操作都需要context**：进行远程内存读写、消息传递等操作时，需要访问context中的信息（如EID、设备操作函数等）。
+
+3. **context提供了应用程序工作所需的所有上下文信息**：
+   - 设备信息（通过 `ctx->dev`）
+   - 操作函数（通过 `ctx->ops`）
+   - 网络身份标识（通过 `ctx->eid`、`ctx->uasid`）
+   - 与内核通信的通道（通过 `ctx->dev_fd`）
+
+4. **资源生命周期管理**：context通过引用计数管理资源生命周期，确保资源在使用期间不会被错误释放。
+
+**类比说明：**
+- **设备（device）**：像是"硬件设备"
+- **上下文（context）**：像是"打开设备后获得的句柄/会话"，应用程序通过这个"会话"来使用设备的所有功能
+- 没有context，就像有设备但没有打开，无法使用
+
+**urma_device和urma_context的关系：**
+
+`urma_context_t` 代表一个URMA上下文，是应用程序与URMA设备交互的核心对象。所有资源（Jetty、Segment等）都关联到某个上下文。
+
+**关系图：**
+
+```
+urma_device (设备抽象)
+    │
+    │ 通过 urma_create_context(dev, eid_index) 创建
+    │
+    ▼
+urma_context (上下文，应用程序的主要工作对象)
+    │
+    │ 包含指向 dev 的指针 (ctx->dev)
+    │ 包含运行时操作函数表 (ctx->ops)
+    │ 包含 EID 信息 (ctx->eid, ctx->eid_index)
+    │ 包含设备文件描述符 (ctx->dev_fd)
+    │
+    │ 所有资源创建都使用 context
+    │
+    ▼
+资源 (Jetty, Segment, JFC, JFS, JFR等)
+    │ 每个资源都包含 urma_ctx 指针
+    │ 创建资源时增加 ctx->ref 引用计数
+```
+
+**关键区别：**
+
+| 特性 | urma_device | urma_context |
+|------|-------------|--------------|
+| **作用** | 设备抽象，代表硬件设备 | 工作上下文，应用程序的主要操作对象 |
+| **创建时机** | 设备发现时自动创建 | 应用程序主动调用 `urma_create_context()` 创建 |
+| **数量关系** | 一个设备可以创建多个上下文 | 每个上下文关联一个设备 |
+| **ops类型** | `urma_provider_ops_t`（设备级操作） | `urma_ops_t`（运行时操作） |
+| **使用场景** | 设备查询、上下文创建 | 所有资源创建、数据操作 |
+
+**结构定义：**
+
+```c
 typedef struct urma_context {
-    struct urma_device *dev;     // 设备指针
-    struct urma_ops *ops;        // 操作函数
-    int dev_fd;                  // 设备文件描述符
-    int async_fd;                // 异步事件文件描述符
-    pthread_mutex_t mutex;       // 互斥锁
-    urma_eid_t eid;              // 端点标识 [公开]
-    uint32_t eid_index;          // EID索引
-    uint32_t uasid;              // 用户地址空间ID [公开]
-    struct urma_ref ref;         // 引用计数
-    urma_context_aggr_mode_t aggr_mode; // 聚合模式
+    struct urma_device *dev;          // [私有] 指向关联的设备
+    struct urma_ops *ops;             // [私有] 设备操作函数表
+    int dev_fd;                       // [私有] 设备文件描述符
+    int async_fd;                     // [私有] 异步事件文件描述符
+    pthread_mutex_t mutex;            // [私有] 互斥锁
+    urma_eid_t eid;                   // [公开] 端点标识
+    uint32_t eid_index;               // [私有] EID索引
+    uint32_t uasid;                   // [公开] 用户地址空间ID
+    struct urma_ref ref;              // [私有] 引用计数
+    urma_context_aggr_mode_t aggr_mode; // [公开] 聚合模式
 } urma_context_t;
 ```
+
+**字段详解：**
+
+| 字段 | 类型 | 可见性 | 说明 |
+|------|------|--------|------|
+| `dev` | `struct urma_device *` | [私有] | **关联设备**：指向创建此上下文时使用的URMA设备。一个设备可以创建多个上下文，但每个上下文只关联一个设备。 |
+| `ops` | `struct urma_ops *` | [私有] | **操作函数表**：指向设备的运行时操作函数表（`urma_ops_t`），包含创建Jetty、提交WR、轮询完成等接口。由URMA内部使用。 |
+| `dev_fd` | `int` | [私有] | **设备文件描述符**：打开设备控制文件（字符设备）的文件描述符，用于与内核驱动通信（ioctl）。 |
+| `async_fd` | `int` | [私有] | **异步事件文件描述符**：用于接收异步事件的文件描述符，用于处理设备错误、端口状态变化等异步事件。 |
+| `mutex` | `pthread_mutex_t` | [私有] | **互斥锁**：保护上下文内部状态的互斥锁，确保多线程访问的安全性。 |
+| `eid` | `urma_eid_t` | [公开] | **端点标识**：此上下文使用的EID（Endpoint ID），用于标识上下文所属的端点。16字节的EID，可以通过 `ctx->eid` 访问。 |
+| `eid_index` | `uint32_t` | [私有] | **EID索引**：创建上下文时指定的EID索引，用于从设备中选择特定的EID。<br><br>**EID索引的作用**：<br>- 一个设备可能有多个EID（端点标识），通过EID索引（0, 1, 2...）来区分<br>- 创建上下文时，通过 `urma_create_context(dev, eid_index)` 指定要使用的EID索引<br>- 系统根据eid_index从设备的EID列表中选择对应的EID，并存储在 `ctx->eid` 中<br>- EID索引范围通常是 0 到 `max_eid_cnt - 1`（最多1024个）<br><br>**EID和上下文的关系**：<br>- 上下文创建时绑定一个EID（通过eid_index选择）<br>- 上下文的 `ctx->eid` 字段存储了完整的16字节EID值<br>- 上下文的 `ctx->eid_index` 字段存储了EID的索引<br>- 这个EID用于标识此上下文在网络中的身份，所有通过此上下文创建的资源都使用这个EID<br><br>**每个context都有全局唯一的EID吗？**<br>- **EID在UBUS网络中是全局唯一的**：每个EID在网络中唯一标识一个端点<br>- **多个context可以共享同一个EID**：同一个设备可以使用相同的eid_index创建多个context，这些context使用相同的EID<br>- **典型场景**：一个进程可能创建多个context用于不同的用途（如不同的线程），它们可能使用相同的EID<br>- **唯一性保证**：EID本身是全局唯一的（在网络范围内），但多个context可以绑定到同一个EID |
+| `uasid` | `uint32_t` | [公开] | **用户地址空间ID**：当前进程的用户地址空间标识符，用于区分不同进程的地址空间。4字节标识符，可以通过 `ctx->uasid` 访问。 |
+| `ref` | `struct urma_ref` | [私有] | **引用计数**：上下文的引用计数，用于管理上下文生命周期。当创建资源（Jetty、Segment等）时增加计数，删除资源时减少计数。只有当引用计数为1时才能删除上下文。 |
+| `aggr_mode` | `urma_context_aggr_mode_t` | [公开] | **聚合模式**：上下文的聚合模式，用于多路径聚合场景。可选值：<br>- `URMA_AGGR_MODE_STANDALONE`：独立模式（默认）<br>- `URMA_AGGR_MODE_ACTIVE_BACKUP`：主备模式<br>- `URMA_AGGR_MODE_BALANCE`：负载均衡模式 |
+
+**聚合模式说明：**
+
+- **STANDALONE（独立模式）**：默认模式，上下文独立工作，不进行多路径聚合。适用于单设备单路径场景。
+
+- **ACTIVE_BACKUP（主备模式）**：使用主路径传输，主路径故障时自动切换到备份路径。提供高可用性，但只使用一条路径的带宽。适用于对可靠性要求高的场景。
+
+- **BALANCE（负载均衡模式）**：在多个路径间进行负载均衡，充分利用所有路径的带宽。适用于需要高带宽的场景。需要硬件支持多路径聚合。
+
+**使用示例：**
+
+```c
+// 1. 创建上下文
+urma_device_t *dev = urma_get_device_by_name("udma0");
+urma_context_t *ctx = urma_create_context(dev, eid_index);
+
+// 2. 访问公开字段
+printf("EID: ...\n");  // 可以通过ctx->eid访问
+printf("UASID: %u\n", ctx->uasid);
+printf("Aggregation mode: %d\n", ctx->aggr_mode);
+
+// 3. 设置聚合模式（仅对聚合设备有效）
+urma_context_aggr_mode_t mode = URMA_AGGR_MODE_BALANCE;
+urma_set_context_opt(ctx, URMA_OPT_AGGR_MODE, &mode, sizeof(mode));
+
+// 4. 使用上下文创建资源
+urma_jfc_t *jfc = urma_create_jfc(ctx, &jfc_cfg);
+urma_target_seg_t *seg = urma_register_seg(ctx, &seg_cfg);
+
+// 5. 删除上下文（必须先删除所有关联的资源）
+urma_delete_context(ctx);
+```
+
+**生命周期管理：**
+
+1. **创建**：通过 `urma_create_context(dev, eid_index)` 创建，关联到指定的设备和EID索引。
+2. **使用**：所有资源创建、数据操作都需要使用上下文。
+3. **引用计数**：创建资源时自动增加引用计数，删除资源时自动减少。
+4. **删除**：必须确保所有关联的资源都已删除（引用计数为1），才能调用 `urma_delete_context()`。
+
+**为什么所有资源创建都需要上下文？**
+
+所有资源创建函数（如 `urma_create_jfc()`、`urma_register_seg()` 等）都需要上下文参数，原因包括：
+
+1. **操作函数表（ops）**：资源创建需要调用具体的操作函数，这些函数存储在 `ctx->ops` 中。不同的硬件Provider有不同的实现，通过上下文可以访问到正确的操作函数。
+
+2. **设备信息（dev）**：资源创建时需要访问设备信息（如设备能力、限制等），通过 `ctx->dev` 可以访问到设备结构。
+
+3. **设备文件描述符（dev_fd）**：资源创建需要与内核驱动通信（通过ioctl），`ctx->dev_fd` 提供了与内核通信的通道。
+
+4. **EID和UASID**：资源需要关联到特定的EID和UASID，这些信息存储在上下文中（`ctx->eid`、`ctx->uasid`）。
+
+5. **引用计数管理（ref）**：资源创建时会增加上下文的引用计数（`atomic_fetch_add(&ctx->ref.atomic_cnt, 1)`），确保上下文在使用期间不会被删除。
+
+6. **资源关联**：每个资源结构都包含 `urma_ctx` 指针，指向创建它的上下文，用于后续的资源操作和清理。
+
+**总结**：上下文是应用程序与URMA设备交互的核心对象，所有资源都必须在某个上下文的"作用域"内创建和使用。
 
 ### 3.2 Work Request (WR) - 工作请求
 
@@ -2377,6 +2593,9 @@ modprobe uburma    # 再加载URMA模块（依赖ubcore）
 | 2026-01-12 | 扩展2.3.6节：详细解释NON_CACHEABLE的作用和意义（缓存一致性、DMA场景、性能考虑） |
 | 2026-01-12 | 新增Q6：关于Segment访问权限的常见问题（权限规则、Token传递、NON_CACHEABLE作用） |
 | 2026-01-12 | 删除2.3.10节中的不准确描述，避免与Q6.1重复 |
+| 2026-01-12 | 扩展2.4.1节：详细说明JFCE的作用、工作原理、使用场景和使用流程 |
+| 2026-01-12 | 大幅扩展3.1节：详细说明urma_device和urma_context的每个字段（类型、可见性、说明、使用示例） |
+| 2026-01-12 | 扩展3.1.2节：详细解释urma_device和urma_context的关系、dev->ops和ctx->ops的区别、EID索引的作用、聚合模式说明、为什么所有资源创建都需要上下文 |
 
 ---
 
